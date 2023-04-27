@@ -1,0 +1,36 @@
+------------------------------------------------------------
+N12W018 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorld2020_2021_WorldCover2020)
+------------------------------------------------------------
+✔ Earth Engine export: 0
+✕ Numpy processing: 42
+✕ Complete tars: 0
+------------------------------------------------------------
+S51W075 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorld2020_2021_WorldCover2020)
+------------------------------------------------------------
+✔ Earth Engine export: 0
+✕ Numpy processing: 24
+✕ Complete tars: 0
+------------------------------------------------------------
+N33E072 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorld2020_2021_WorldCover2020)
+------------------------------------------------------------
+✔ Earth Engine export: 0
+✕ Numpy processing: 36
+✕ Complete tars: 0
+------------------------------------------------------------
+N24W099 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorld2020_2021_WorldCover2020)
+------------------------------------------------------------
+✔ Earth Engine export: 0
+✕ Numpy processing: 24
+✕ Complete tars: 0
+------------------------------------------------------------
+S15E033 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorld2020_2021_WorldCover2020)
+------------------------------------------------------------
+✔ Earth Engine export: 0
+✕ Numpy processing: 36
+✕ Complete tars: 0
+------------------------------------------------------------
+N60W150 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorld2020_2021_WorldCover2020)
+------------------------------------------------------------
+✕ Earth Engine export: 12
+✕ Numpy processing: 6
+✕ Complete tars: 0

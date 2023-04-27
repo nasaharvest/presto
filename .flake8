@@ -1,0 +1,7 @@
+[flake8]
+exclude = venv
+max-line-length = 100
+ignore =
+    E203 // black
+    W503 // black
+    E712 // sometimes, we don't want to use an `is` check for conditionals (e.g. pandas)

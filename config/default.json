@@ -1,0 +1,11 @@
+{
+    "encoder_embedding_size": 128,
+    "channel_embed_ratio": 0.25,
+    "month_embed_ratio": 0.25,
+    "encoder_depth": 2,
+    "mlp_ratio": 4,
+    "encoder_num_heads": 8,
+    "decoder_embedding_size": 128,
+    "decoder_depth": 2,
+    "decoder_num_heads": 8
+}

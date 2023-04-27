@@ -1,0 +1,600 @@
+------------------------------------------------------------
+dw_144_shard_0 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 148/148
+ 	DynamicWorldMonthly2020_2021: 148/148
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 148/148
+ 	DynamicWorldMonthly2020_2021: 148/148
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_1 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 133/133
+ 	DynamicWorldMonthly2020_2021: 133/133
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 133/133
+ 	DynamicWorldMonthly2020_2021: 133/133
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_2 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 147/147
+ 	DynamicWorldMonthly2020_2021: 147/147
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 147/147
+ 	DynamicWorldMonthly2020_2021: 147/147
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_3 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 141/141
+ 	DynamicWorldMonthly2020_2021: 141/141
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 141/141
+ 	DynamicWorldMonthly2020_2021: 141/141
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_4 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 138/138
+ 	DynamicWorldMonthly2020_2021: 138/138
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 138/138
+ 	DynamicWorldMonthly2020_2021: 138/138
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_5 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 168/168
+ 	DynamicWorldMonthly2020_2021: 168/168
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 168/168
+ 	DynamicWorldMonthly2020_2021: 168/168
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_6 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 144/154
+ 	DynamicWorldMonthly2020_2021: 154/154
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 144/154
+ 	DynamicWorldMonthly2020_2021: 154/154
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_7 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 130/130
+ 	DynamicWorldMonthly2020_2021: 130/130
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 130/130
+ 	DynamicWorldMonthly2020_2021: 130/130
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_8 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 133/133
+ 	DynamicWorldMonthly2020_2021: 133/133
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 133/133
+ 	DynamicWorldMonthly2020_2021: 133/133
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_9 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 137/137
+ 	DynamicWorldMonthly2020_2021: 137/137
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 137/137
+ 	DynamicWorldMonthly2020_2021: 137/137
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_10 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 146/146
+ 	DynamicWorldMonthly2020_2021: 146/146
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 146/146
+ 	DynamicWorldMonthly2020_2021: 146/146
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_11 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 162/162
+ 	DynamicWorldMonthly2020_2021: 162/162
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 162/162
+ 	DynamicWorldMonthly2020_2021: 162/162
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_12 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 146/146
+ 	DynamicWorldMonthly2020_2021: 146/146
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 146/146
+ 	DynamicWorldMonthly2020_2021: 146/146
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_13 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 154/154
+ 	DynamicWorldMonthly2020_2021: 154/154
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 154/154
+ 	DynamicWorldMonthly2020_2021: 154/154
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_14 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 149/149
+ 	DynamicWorldMonthly2020_2021: 149/149
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 149/149
+ 	DynamicWorldMonthly2020_2021: 149/149
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_15 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 135/135
+ 	DynamicWorldMonthly2020_2021: 135/135
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 135/135
+ 	DynamicWorldMonthly2020_2021: 135/135
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_16 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 144/144
+ 	DynamicWorldMonthly2020_2021: 144/144
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 144/144
+ 	DynamicWorldMonthly2020_2021: 144/144
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_17 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 143/143
+ 	DynamicWorldMonthly2020_2021: 143/143
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 143/143
+ 	DynamicWorldMonthly2020_2021: 143/143
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_18 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 141/141
+ 	DynamicWorldMonthly2020_2021: 141/141
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 141/141
+ 	DynamicWorldMonthly2020_2021: 141/141
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_19 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 133/133
+ 	DynamicWorldMonthly2020_2021: 133/133
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 133/133
+ 	DynamicWorldMonthly2020_2021: 133/133
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_20 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 150/150
+ 	DynamicWorldMonthly2020_2021: 150/150
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 150/150
+ 	DynamicWorldMonthly2020_2021: 150/150
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_21 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 132/132
+ 	DynamicWorldMonthly2020_2021: 132/132
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 132/132
+ 	DynamicWorldMonthly2020_2021: 132/132
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_22 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 139/139
+ 	DynamicWorldMonthly2020_2021: 139/139
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 139/139
+ 	DynamicWorldMonthly2020_2021: 139/139
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_23 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 135/135
+ 	DynamicWorldMonthly2020_2021: 135/135
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 135/135
+ 	DynamicWorldMonthly2020_2021: 135/135
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_24 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 158/158
+ 	DynamicWorldMonthly2020_2021: 158/158
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 158/158
+ 	DynamicWorldMonthly2020_2021: 158/158
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_25 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 133/133
+ 	DynamicWorldMonthly2020_2021: 133/133
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 133/133
+ 	DynamicWorldMonthly2020_2021: 133/133
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_26 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 149/149
+ 	DynamicWorldMonthly2020_2021: 149/149
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 149/149
+ 	DynamicWorldMonthly2020_2021: 149/149
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_27 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 155/155
+ 	DynamicWorldMonthly2020_2021: 155/155
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 155/155
+ 	DynamicWorldMonthly2020_2021: 155/155
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_28 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 149/149
+ 	DynamicWorldMonthly2020_2021: 149/149
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 149/149
+ 	DynamicWorldMonthly2020_2021: 149/149
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_29 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 151/151
+ 	DynamicWorldMonthly2020_2021: 151/151
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 151/151
+ 	DynamicWorldMonthly2020_2021: 151/151
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_30 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 147/147
+ 	DynamicWorldMonthly2020_2021: 147/147
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 147/147
+ 	DynamicWorldMonthly2020_2021: 147/147
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_31 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 122/122
+ 	DynamicWorldMonthly2020_2021: 122/122
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 122/122
+ 	DynamicWorldMonthly2020_2021: 122/122
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_32 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 150/150
+ 	DynamicWorldMonthly2020_2021: 150/150
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 150/150
+ 	DynamicWorldMonthly2020_2021: 150/150
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_33 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 134/134
+ 	DynamicWorldMonthly2020_2021: 134/134
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 134/134
+ 	DynamicWorldMonthly2020_2021: 134/134
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_34 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 136/136
+ 	DynamicWorldMonthly2020_2021: 136/136
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 136/136
+ 	DynamicWorldMonthly2020_2021: 136/136
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_35 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 165/165
+ 	DynamicWorldMonthly2020_2021: 165/165
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 165/165
+ 	DynamicWorldMonthly2020_2021: 165/165
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_36 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 125/125
+ 	DynamicWorldMonthly2020_2021: 125/125
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 125/125
+ 	DynamicWorldMonthly2020_2021: 125/125
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_37 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 151/151
+ 	DynamicWorldMonthly2020_2021: 151/151
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 151/151
+ 	DynamicWorldMonthly2020_2021: 151/151
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_38 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 173/173
+ 	DynamicWorldMonthly2020_2021: 173/173
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 173/173
+ 	DynamicWorldMonthly2020_2021: 173/173
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_39 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 113/113
+ 	DynamicWorldMonthly2020_2021: 113/113
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 113/113
+ 	DynamicWorldMonthly2020_2021: 113/113
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_40 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 128/128
+ 	DynamicWorldMonthly2020_2021: 128/128
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 128/128
+ 	DynamicWorldMonthly2020_2021: 128/128
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_41 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 141/141
+ 	DynamicWorldMonthly2020_2021: 141/141
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 141/141
+ 	DynamicWorldMonthly2020_2021: 141/141
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_42 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 140/140
+ 	DynamicWorldMonthly2020_2021: 140/140
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 140/140
+ 	DynamicWorldMonthly2020_2021: 140/140
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_43 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 160/160
+ 	DynamicWorldMonthly2020_2021: 160/160
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 160/160
+ 	DynamicWorldMonthly2020_2021: 160/160
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_44 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 129/129
+ 	DynamicWorldMonthly2020_2021: 129/129
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 129/129
+ 	DynamicWorldMonthly2020_2021: 129/129
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_45 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 144/144
+ 	DynamicWorldMonthly2020_2021: 144/144
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 144/144
+ 	DynamicWorldMonthly2020_2021: 144/144
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_46 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 137/137
+ 	DynamicWorldMonthly2020_2021: 137/137
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 137/137
+ 	DynamicWorldMonthly2020_2021: 137/137
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_47 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 150/150
+ 	DynamicWorldMonthly2020_2021: 150/150
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 150/150
+ 	DynamicWorldMonthly2020_2021: 150/150
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_48 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 146/146
+ 	DynamicWorldMonthly2020_2021: 146/146
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 146/146
+ 	DynamicWorldMonthly2020_2021: 146/146
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_49 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 167/167
+ 	DynamicWorldMonthly2020_2021: 167/167
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 167/167
+ 	DynamicWorldMonthly2020_2021: 167/167
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_50 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 135/135
+ 	DynamicWorldMonthly2020_2021: 135/135
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 135/135
+ 	DynamicWorldMonthly2020_2021: 135/135
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_51 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 167/167
+ 	DynamicWorldMonthly2020_2021: 167/167
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 167/167
+ 	DynamicWorldMonthly2020_2021: 167/167
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_52 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 133/133
+ 	DynamicWorldMonthly2020_2021: 133/133
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 133/133
+ 	DynamicWorldMonthly2020_2021: 133/133
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_53 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 137/137
+ 	DynamicWorldMonthly2020_2021: 137/137
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 137/137
+ 	DynamicWorldMonthly2020_2021: 137/137
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_54 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 130/130
+ 	DynamicWorldMonthly2020_2021: 130/130
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 130/130
+ 	DynamicWorldMonthly2020_2021: 130/130
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_55 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 131/131
+ 	DynamicWorldMonthly2020_2021: 131/131
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 131/131
+ 	DynamicWorldMonthly2020_2021: 131/131
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_56 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 148/148
+ 	DynamicWorldMonthly2020_2021: 148/148
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 148/148
+ 	DynamicWorldMonthly2020_2021: 148/148
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_57 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 145/145
+ 	DynamicWorldMonthly2020_2021: 145/145
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 145/145
+ 	DynamicWorldMonthly2020_2021: 145/145
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_58 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 161/161
+ 	DynamicWorldMonthly2020_2021: 161/161
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 161/161
+ 	DynamicWorldMonthly2020_2021: 161/161
+ Complete tar: 1/1
+------------------------------------------------------------
+dw_144_shard_59 (S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021)
+------------------------------------------------------------
+ Earth Engine files:
+ 	S1_S2_ERA5_SRTM_2020_2021: 134/134
+ 	DynamicWorldMonthly2020_2021: 134/134
+ Numpy processing:
+ 	S1_S2_ERA5_SRTM_2020_2021: 134/134
+ 	DynamicWorldMonthly2020_2021: 134/134
+ Complete tar: 1/1
