@@ -1,5 +1,7 @@
 # The Pretrained Remote Sensing Transformer (Presto)
 
+This code accompanies our paper, [Lightweight, Pre-trained Transformers for Remote Sensing Timeseries](https://arxiv.org/abs/2304.14065).
+
 ## Environment Setup
 ```bash
 python -m venv venv
@@ -163,4 +165,17 @@ Out[6]:
 7       22
 dtype: int64
 
+```
+
+## Reference
+If you find this code useful, please cite the following paper:
+```
+@misc{tseng2023lightweight,
+      title={Lightweight, Pre-trained Transformers for Remote Sensing Timeseries},
+      author={Gabriel Tseng and Ivan Zvonkov and Mirali Purohit and David Rolnick and Hannah Kerner},
+      year={2023},
+      eprint={2304.14065},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV}
+}
 ```
