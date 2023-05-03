@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union, cast
 
@@ -7,8 +8,6 @@ import xarray
 from einops import repeat
 from google.cloud import storage
 from pyproj import Transformer
-from scipy import stats
-from scipy.special import softmax
 from sklearn.base import BaseEstimator
 from sklearn.metrics import (
     accuracy_score,
@@ -17,7 +16,6 @@ from sklearn.metrics import (
     precision_score,
     recall_score,
 )
-from sklearn.preprocessing import label_binarize
 from torch import nn
 from torch.optim import Adam
 from torch.utils.data import DataLoader, TensorDataset
@@ -38,6 +36,7 @@ from .eval import EvalDataset
 treesat_folder = data_dir / "treesat"
 s1_files = treesat_folder / "s1/60m"
 s2_files = treesat_folder / "s2/60m"
+labels_path = treesat_folder / "TreeSatBA_v9_60m_multi_labels.json"
 
 # https://zenodo.org/record/6780578
 # Band order is B02, B03, B04, B08, B05, B06, B07, B8A, B11, B12, B01, and B09.
@@ -55,8 +54,29 @@ INDICES_IN_TIF_FILE = list(range(0, 6, 2))
 
 class TreeSatEval(EvalDataset):
 
+    labels_to_int = {
+        "Abies": 0,
+        "Acer": 1,
+        "Alnus": 2,
+        "Betula": 3,
+        "Cleared": 4,
+        "Fagus": 5,
+        "Fraxinus": 6,
+        "Larix": 7,
+        "Picea": 8,
+        "Pinus": 9,
+        "Populus": 10,
+        "Prunus": 11,
+        "Pseudotsuga": 12,
+        "Quercus": 13,
+        "Tilia": 14,
+    }
+
     regression = False
-    num_outputs = 20
+    # different than the paper but this is
+    # from all the unique classes in the labels json
+    # (above)
+    num_outputs = 15
 
     # this is not the true start month!
     # the data is a mosaic of summer months
@@ -86,7 +106,7 @@ class TreeSatEval(EvalDataset):
         return {"train": train_files, "test": test_files}
 
     @classmethod
-    def image_to_eo_array(cls, tif_file: Path):
+    def image_to_eo_array(cls, tif_file: Path, labels: Dict):
 
         s1_image, class_name = cls.s2_image_path_to_s1_path_and_class(tif_file)
         s2 = xarray.open_rasterio(tif_file)
@@ -95,7 +115,7 @@ class TreeSatEval(EvalDataset):
         crs = s2.crs.split("=")[-1]
         transformer = Transformer.from_crs(crs, "EPSG:4326")
 
-        arrays, latlons, labels, image_names = [], [], [], []
+        arrays, latlons, label_list, image_names = [], [], [], []
 
         kept_treesat_s2_band_idx = [
             i for i, val in enumerate(S2_BAND_ORDERING) if val not in REMOVED_BANDS
@@ -113,6 +133,11 @@ class TreeSatEval(EvalDataset):
             BANDS.index(val) for val in kept_kept_treesat_s1_band_names
         ]
 
+        labels_np = np.zeros(len(cls.labels_to_int))
+        positive_classes = labels[tif_file.name]
+        for (name, percentage) in positive_classes:
+            labels_np[cls.labels_to_int[name]] = percentage
+
         for x_idx in INDICES_IN_TIF_FILE:
             for y_idx in INDICES_IN_TIF_FILE:
                 s2_vals = s2.values[:, x_idx, y_idx]
@@ -124,12 +149,12 @@ class TreeSatEval(EvalDataset):
                 eo_style_array[treesat_to_cropharvest_s2_map] = s2_vals[kept_treesat_s2_band_idx]
                 eo_style_array[treesat_to_cropharvest_s1_map] = s1_vals[kept_treesat_s1_band_idx]
                 arrays.append(np.expand_dims(eo_style_array, 0))
-                labels.append(class_name)
+                label_list.append(labels_np)
                 image_names.append(tif_file.name)
         return (
             np.stack(arrays, axis=0),
             np.stack(latlons, axis=0),
-            np.array(labels),
+            np.array(label_list),
             np.array(image_names),
         )
 
@@ -137,13 +162,15 @@ class TreeSatEval(EvalDataset):
     def tifs_to_arrays(cls, mode: str = "train"):
         features_folder = data_dir / f"treesat/{mode}_features"
         features_folder.mkdir(exist_ok=True)
+        with labels_path.open("r") as f:
+            labels_dict = json.load(f)
 
         images_to_process = cls.split_images()[mode]
 
         arrays, latlons, labels, image_names = [], [], [], []
 
         for image in tqdm(images_to_process):
-            output = cls.image_to_eo_array(s2_files / image.strip())
+            output = cls.image_to_eo_array(s2_files / image.strip(), labels_dict)
             arrays.append(output[0])
             latlons.append(output[1])
             labels.append(output[2])
@@ -174,10 +201,6 @@ class TreeSatEval(EvalDataset):
         npy_folder.mkdir(exist_ok=True)
 
         labels = cls.load_npy_gcloud(npy_folder / "labels.npy")
-        # this returns ints instead of strings, so that we can seamlessly
-        # pass it to the sklearn models
-        _, labels_to_int = np.unique(labels, return_inverse=True)
-
         # all dynamic world values are considered masked
         dw = np.ones((len(labels), 1)) * DynamicWorld2020_2021.class_amount
 
@@ -185,17 +208,11 @@ class TreeSatEval(EvalDataset):
             S1_S2_ERA5_SRTM.normalize(cls.load_npy_gcloud(npy_folder / "arrays.npy")),
             dw,
             cls.load_npy_gcloud(npy_folder / "latlons.npy"),
-            labels_to_int,
+            cls.min_threshold(labels),
             cls.load_npy_gcloud(npy_folder / "image_names.npy"),
         )
 
     def update_mask(self, mask: Optional[np.ndarray] = None):
-        # if not self.rgb:
-        #     channels_lists = [x for key, x in BANDS_GROUPS_IDX.items() if "S2" in key]
-        #     # flatten the list of lists
-        #     default_channels = [item for sublist in channels_lists for item in sublist]
-        # else:
-        # a bit hacky but it will have to do
         if self.subset is None:
             channels_list = [
                 x for k, x in BANDS_GROUPS_IDX.items() if (("S1" in k) or ("S2" in k))
@@ -234,12 +251,14 @@ class TreeSatEval(EvalDataset):
         pix_per_image = len(INDICES_IN_TIF_FILE) ** 2
         assert len(target) % pix_per_image == 0
         assert len(np.unique(image_names)) == len(target) / pix_per_image
-        target = np.reshape(target, (int(len(target) / pix_per_image), pix_per_image))
+        target = np.reshape(
+            target, (int(len(target) / pix_per_image), pix_per_image, len(self.labels_to_int))
+        )
         image_names = np.reshape(
             image_names, (int(len(image_names) / pix_per_image), pix_per_image)
         )
         assert (image_names.T == image_names.T[0, :]).all()
-        assert (target.T == target.T[0, :]).all()
+        # assert (target.T == target.T[0, :]).all()
         image_names = image_names[:, 0]
         target = target[:, 0]
 
@@ -283,7 +302,14 @@ class TreeSatEval(EvalDataset):
                     .cpu()
                     .numpy()
                 )
-                preds = finetuned_model.predict_proba(encodings)
+                preds_list = finetuned_model.predict_proba(encodings)
+                # this is a list of probabilities; we want to take the sum of
+                # positive predictions
+                preds = np.zeros((preds_list[0].shape[0], len(self.labels_to_int)))
+                for idx, pred in enumerate(preds_list):
+                    if pred.shape[1] == 2:
+                        # if not, there are no positive samples
+                        preds[:, idx] = pred[:, 1]
 
             test_preds.append(preds)
         test_preds_np = np.concatenate(test_preds, axis=0)
@@ -291,43 +317,50 @@ class TreeSatEval(EvalDataset):
             test_preds_np,
             (int(len(test_preds_np) / pix_per_image), pix_per_image, test_preds_np.shape[-1]),
         )
-        # then, take the mode of the model predictions
-        test_preds_np_argmax = stats.mode(
-            np.argmax(test_preds_np, axis=-1), axis=1, keepdims=False
-        )[0]
-
-        test_preds_np_mean = np.mean(softmax(test_preds_np, axis=-1), axis=1)
-        classes = list(range(test_preds_np_mean.shape[-1]))
+        test_preds_np_mean = np.mean(test_preds_np, axis=1)
+        test_preds_binary = test_preds_np_mean > 0.5
 
         prefix = finetuned_model.__class__.__name__
         return {
             f"{self.name}: {prefix}_num_samples": len(target),
             f"{self.name}: {prefix}_mAP_score_weighted": average_precision_score(
-                label_binarize(target, classes=classes), test_preds_np_mean, average="weighted"
+                target, test_preds_np_mean, average="weighted"
             ),
             f"{self.name}: {prefix}_mAP_score_micro": average_precision_score(
-                label_binarize(target, classes=classes), test_preds_np_mean, average="micro"
+                target, test_preds_np_mean, average="micro"
             ),
             f"{self.name}: {prefix}_f1_score_weighted": f1_score(
-                target, test_preds_np_argmax, average="weighted"
+                target, test_preds_binary, average="weighted"
             ),
             f"{self.name}: {prefix}_f1_score_micro": f1_score(
-                target, test_preds_np_argmax, average="micro"
+                target, test_preds_binary, average="micro"
             ),
             f"{self.name}: {prefix}_precision_micro": precision_score(
-                target, test_preds_np_argmax, average="micro"
+                target, test_preds_binary, average="micro"
             ),
             f"{self.name}: {prefix}_precision_weighted": precision_score(
-                target, test_preds_np_argmax, average="weighted"
+                target, test_preds_binary, average="weighted"
             ),
             f"{self.name}: {prefix}_recall_micro": recall_score(
-                target, test_preds_np_argmax, average="micro"
+                target, test_preds_binary, average="micro"
             ),
             f"{self.name}: {prefix}_recall_weighted": recall_score(
-                target, test_preds_np_argmax, average="weighted"
+                target, test_preds_binary, average="weighted"
             ),
-            f"{self.name}: {prefix}_accuracy_score": accuracy_score(target, test_preds_np_argmax),
+            f"{self.name}: {prefix}_accuracy_score": accuracy_score(target, test_preds_binary),
         }
+
+    @staticmethod
+    def min_threshold(labels: np.ndarray, binarize: bool = True):
+        # this is what is also done in
+        # https://git.tu-berlin.de/rsim/treesat_benchmark/-/blob/master/TreeSat_Benchmark/trainers/utils.py#L27
+        lower_bound = 0.07  # anything below this is ignored
+        bounded = np.where(
+            labels > lower_bound,
+            np.ones_like(lower_bound) if binarize else labels,
+            np.zeros_like(lower_bound),
+        )
+        return bounded
 
     def finetuning_results(
         self,
@@ -367,15 +400,11 @@ class TreeSatEval(EvalDataset):
         return results_dict
 
     def finetune(self, pretrained_model, mask: Optional[np.ndarray] = None) -> FineTuningModel:
-        # TODO - where are these controlled?
         lr, max_epochs, batch_size = 3e-4, 3, 64
         model = self._construct_finetuning_model(pretrained_model)
 
-        # TODO - should this be more intelligent? e.g. first learn the
-        # (randomly initialized) head before modifying parameters for
-        # the whole model?
         opt = Adam(model.parameters(), lr=lr)
-        loss_fn = nn.CrossEntropyLoss(reduction="mean")
+        loss_fn = nn.BCELoss(reduction="mean")
 
         x, dw, latlons, target, _ = self.load_npys(test=False)
 
@@ -384,7 +413,7 @@ class TreeSatEval(EvalDataset):
                 torch.from_numpy(x).to(device).float(),
                 torch.from_numpy(dw).to(device).long(),
                 torch.from_numpy(latlons).to(device).float(),
-                torch.from_numpy(target).to(device).long(),
+                torch.from_numpy(target).to(device).float(),
             ),
             batch_size=batch_size,
             shuffle=True,
