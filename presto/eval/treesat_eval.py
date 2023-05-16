@@ -113,7 +113,7 @@ class TreeSatEval(EvalDataset):
         s1 = xarray.open_rasterio(s1_image)
         # from (e.g.) +init=epsg:32630 to epsg:32630
         crs = s2.crs.split("=")[-1]
-        transformer = Transformer.from_crs(crs, "EPSG:4326")
+        transformer = Transformer.from_crs(crs, "EPSG:4326", always_xy=True)
 
         arrays, latlons, label_list, image_names = [], [], [], []
 

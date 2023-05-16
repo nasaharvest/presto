@@ -86,7 +86,7 @@ class EuroSatEval(EvalDataset):
         image = xarray.open_rasterio(tif_file)
         # from (e.g.) +init=epsg:32630 to epsg:32630
         crs = image.crs.split("=")[-1]
-        transformer = Transformer.from_crs(crs, "EPSG:4326")
+        transformer = Transformer.from_crs(crs, "EPSG:4326", always_xy=True)
 
         arrays, latlons, labels, image_names = [], [], [], []
 
