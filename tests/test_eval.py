@@ -55,3 +55,9 @@ class TestEval(TestCase):
 
         self.assertTrue(x_train == seeded_train)
         self.assertTrue(x_test == seeded_test)
+
+    def test_splits_correctly_downloaded(self):
+        train_split = EuroSatEval.url_to_list(EuroSatEval.split_urls["train"])
+        assert len(train_split) == 16200
+        for i in train_split:
+            assert not i.startswith("b'")
