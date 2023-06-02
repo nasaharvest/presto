@@ -43,6 +43,7 @@ def get_eval_datasets(normalize: bool = False, ignore_dynamic_world: bool = Fals
 
 def download_cropharvest_data(root: Path = cropharvest_data_dir):
     if not root.exists():
+        root.mkdir()
         CropHarvest(root, download=True)
     for gcloud_path in ["features/dynamic_world_arrays", "test_dynamic_world_features"]:
         if not (root / gcloud_path).exists():
