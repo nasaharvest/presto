@@ -60,6 +60,7 @@ class CropHarvestEval(EvalDataset):
     multilabel = False
     num_outputs = 1
     start_month = 1
+    num_timesteps = None
 
     def __init__(
         self, country: str, ignore_dynamic_world: bool = False, num_timesteps: Optional[int] = None
