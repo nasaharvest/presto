@@ -57,6 +57,7 @@ def download_cropharvest_data(root: Path = cropharvest_data_dir):
 class CropHarvestEval(EvalDataset):
 
     regression = False
+    multilabel = False
     num_outputs = 1
     start_month = 1
 

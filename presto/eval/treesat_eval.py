@@ -73,6 +73,7 @@ class TreeSatEval(EvalDataset):
     }
 
     regression = False
+    multilabel = True
     # different than the paper but this is
     # from all the unique classes in the labels json
     # (above)
@@ -404,7 +405,7 @@ class TreeSatEval(EvalDataset):
         model = self._construct_finetuning_model(pretrained_model)
 
         opt = Adam(model.parameters(), lr=lr)
-        loss_fn = nn.BCELoss(reduction="mean")
+        loss_fn = nn.BCEWithLogitsLoss(reduction="mean")
 
         x, dw, latlons, target, _ = self.load_npys(test=False)
 

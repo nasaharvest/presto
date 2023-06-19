@@ -40,6 +40,7 @@ INDICES_IN_TIF_FILE = list(range(16, 64, 16))
 class EuroSatEval(EvalDataset):
 
     regression = False
+    multilabel = False
     num_outputs = 10
 
     # this is not the true start month!

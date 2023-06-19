@@ -36,6 +36,7 @@ SURROUNDING_METRES = 80
 class AlgaeBloomsEval(EvalDataset):
 
     regression = True
+    multilabel = False
     num_outputs = 1
 
     def __init__(self) -> None:
