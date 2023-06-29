@@ -15,7 +15,6 @@ from .knn import KNNat5, KNNat20, KNNat100
 
 
 class EvalDataset:
-
     name: str
     num_outputs: int
     regression: bool
@@ -36,7 +35,6 @@ class EvalDataset:
         if self.multilabel:
             lr = MultiOutputClassifier(lr, n_jobs=self.num_outputs)
         return lr
-
 
     def finetune(self, pretrained_model, mask: Optional[np.ndarray] = None) -> FineTuningModel:
         raise NotImplementedError
@@ -71,7 +69,6 @@ class EvalDataset:
         batch_size: int = 64,
         models: List[str] = ["Regression", "Random Forest"],
     ) -> Sequence[BaseEstimator]:
-
         for model_mode in models:
             if self.regression:
                 assert model_mode in ["Regression", "Random Forest"]
@@ -100,7 +97,7 @@ class EvalDataset:
             shuffle=False,
         )
 
-        for (x, dw, latlons, month) in dl:
+        for x, dw, latlons, month in dl:
             batch_mask = self._mask_to_batch_tensor(mask, x.shape[0])
             with torch.no_grad():
                 encodings = (
