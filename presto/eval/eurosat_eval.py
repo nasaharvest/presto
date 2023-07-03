@@ -38,8 +38,8 @@ INDICES_IN_TIF_FILE = list(range(16, 64, 16))
 
 
 class EuroSatEval(EvalDataset):
-
     regression = False
+    multilabel = False
     num_outputs = 10
 
     # this is not the true start month!
@@ -82,7 +82,6 @@ class EuroSatEval(EvalDataset):
 
     @staticmethod
     def image_to_eo_array(tif_file: Path):
-
         image = xarray.open_rasterio(tif_file)
         # from (e.g.) +init=epsg:32630 to epsg:32630
         crs = image.crs.split("=")[-1]
@@ -230,7 +229,7 @@ class EuroSatEval(EvalDataset):
         )
 
         test_preds = []
-        for (x, dw, latlons) in dl:
+        for x, dw, latlons in dl:
             batch_mask = self._mask_to_batch_tensor(updated_mask, x.shape[0])
             if isinstance(finetuned_model, FineTuningModel):
                 finetuned_model.eval()

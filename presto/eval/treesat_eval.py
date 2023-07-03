@@ -53,7 +53,6 @@ INDICES_IN_TIF_FILE = list(range(0, 6, 2))
 
 
 class TreeSatEval(EvalDataset):
-
     labels_to_int = {
         "Abies": 0,
         "Acer": 1,
@@ -73,6 +72,7 @@ class TreeSatEval(EvalDataset):
     }
 
     regression = False
+    multilabel = True
     # different than the paper but this is
     # from all the unique classes in the labels json
     # (above)
@@ -83,7 +83,6 @@ class TreeSatEval(EvalDataset):
     start_month = 6
 
     def __init__(self, subset: Optional[str] = None) -> None:
-
         if subset is not None:
             assert subset in ["S1", "S2"]
             self.name = f"TreeSatAI_{subset}"
@@ -107,7 +106,6 @@ class TreeSatEval(EvalDataset):
 
     @classmethod
     def image_to_eo_array(cls, tif_file: Path, labels: Dict):
-
         s1_image, class_name = cls.s2_image_path_to_s1_path_and_class(tif_file)
         s2 = xarray.open_rasterio(tif_file)
         s1 = xarray.open_rasterio(s1_image)
@@ -135,7 +133,7 @@ class TreeSatEval(EvalDataset):
 
         labels_np = np.zeros(len(cls.labels_to_int))
         positive_classes = labels[tif_file.name]
-        for (name, percentage) in positive_classes:
+        for name, percentage in positive_classes:
             labels_np[cls.labels_to_int[name]] = percentage
 
         for x_idx in INDICES_IN_TIF_FILE:
@@ -273,7 +271,7 @@ class TreeSatEval(EvalDataset):
         )
 
         test_preds = []
-        for (x, dw, latlons) in dl:
+        for x, dw, latlons in dl:
             batch_mask = self._mask_to_batch_tensor(updated_mask, x.shape[0])
             if isinstance(finetuned_model, FineTuningModel):
                 finetuned_model.eval()
@@ -404,7 +402,7 @@ class TreeSatEval(EvalDataset):
         model = self._construct_finetuning_model(pretrained_model)
 
         opt = Adam(model.parameters(), lr=lr)
-        loss_fn = nn.BCELoss(reduction="mean")
+        loss_fn = nn.BCEWithLogitsLoss(reduction="mean")
 
         x, dw, latlons, target, _ = self.load_npys(test=False)
 

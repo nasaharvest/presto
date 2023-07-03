@@ -75,6 +75,6 @@ for eval_task in tqdm(eval_task_list, desc="Full Evaluation"):
     print("\n" + eval_task.name, flush=True)
 
     results = eval_task.finetuning_results(model, model_modes=model_modes)
-    print(results, flush=True)
+    print(json.dumps(results, indent=2), flush=True)
 
     eval_task.clear_data()

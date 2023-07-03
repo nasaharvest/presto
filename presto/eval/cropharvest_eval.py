@@ -55,10 +55,11 @@ def download_cropharvest_data(root: Path = cropharvest_data_dir):
 
 
 class CropHarvestEval(EvalDataset):
-
     regression = False
+    multilabel = False
     num_outputs = 1
     start_month = 1
+    num_timesteps = None
 
     def __init__(
         self, country: str, ignore_dynamic_world: bool = False, num_timesteps: Optional[int] = None
@@ -171,12 +172,10 @@ class CropHarvestEval(EvalDataset):
         pretrained_model=None,
         mask: Optional[np.ndarray] = None,
     ) -> Dict:
-
         if isinstance(finetuned_model, BaseEstimator):
             assert isinstance(pretrained_model, (Mosaiks1d, Seq2Seq))
 
         with tempfile.TemporaryDirectory() as results_dir:
-
             for test_id, test_instance, test_dw_instance in self.dataset.test_data(max_size=10000):
                 savepath = Path(results_dir) / f"{test_id}.nc"
 
@@ -265,7 +264,6 @@ class CropHarvestEval(EvalDataset):
 
 
 class CropHarvestMultiClassValidation(CropHarvestEval):
-
     regression = False
     num_outputs = 10
 
@@ -326,8 +324,7 @@ class CropHarvestMultiClassValidation(CropHarvestEval):
         )
 
         test_preds, test_true = [], []
-        for (x, dw, latlons, y) in dl:
-
+        for x, dw, latlons, y in dl:
             x = S1_S2_ERA5_SRTM.normalize(x).to(device).float()
             b_mask = self._mask_to_batch_tensor(mask, x.shape[0])
 

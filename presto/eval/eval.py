@@ -6,6 +6,7 @@ from einops import repeat
 from sklearn.base import BaseEstimator
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.linear_model import LinearRegression, LogisticRegression
+from sklearn.multioutput import MultiOutputClassifier
 from torch.utils.data import DataLoader, TensorDataset
 
 from ..model import FineTuningModel, Seq2Seq
@@ -14,10 +15,10 @@ from .knn import KNNat5, KNNat20, KNNat100
 
 
 class EvalDataset:
-
     name: str
     num_outputs: int
     regression: bool
+    multilabel: bool
 
     def _construct_finetuning_model(self, pretrained_model: Seq2Seq) -> FineTuningModel:
         model = cast(Callable, pretrained_model.construct_finetuning_model)(
@@ -28,6 +29,12 @@ class EvalDataset:
             regression=self.regression,
         )
         return model
+
+    def _construct_logistic_regression(self) -> BaseEstimator:
+        lr = LogisticRegression(class_weight="balanced", max_iter=1000)
+        if self.multilabel:
+            lr = MultiOutputClassifier(lr, n_jobs=self.num_outputs)
+        return lr
 
     def finetune(self, pretrained_model, mask: Optional[np.ndarray] = None) -> FineTuningModel:
         raise NotImplementedError
@@ -62,7 +69,6 @@ class EvalDataset:
         batch_size: int = 64,
         models: List[str] = ["Regression", "Random Forest"],
     ) -> Sequence[BaseEstimator]:
-
         for model_mode in models:
             if self.regression:
                 assert model_mode in ["Regression", "Random Forest"]
@@ -91,7 +97,7 @@ class EvalDataset:
             shuffle=False,
         )
 
-        for (x, dw, latlons, month) in dl:
+        for x, dw, latlons, month in dl:
             batch_mask = self._mask_to_batch_tensor(mask, x.shape[0])
             with torch.no_grad():
                 encodings = (
@@ -110,7 +116,7 @@ class EvalDataset:
         fit_models = []
         model_dict = {
             False: {
-                "Regression": LogisticRegression(class_weight="balanced", max_iter=1000),
+                "Regression": self._construct_logistic_regression(),
                 "Random Forest": RandomForestClassifier(
                     class_weight="balanced", random_state=DEFAULT_SEED
                 ),

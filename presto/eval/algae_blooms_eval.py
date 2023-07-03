@@ -34,8 +34,8 @@ SURROUNDING_METRES = 80
 
 
 class AlgaeBloomsEval(EvalDataset):
-
     regression = True
+    multilabel = False
     num_outputs = 1
 
     def __init__(self) -> None:
@@ -153,7 +153,6 @@ class AlgaeBloomsEval(EvalDataset):
         pretrained_model=None,
         mask: Optional[np.ndarray] = None,
     ) -> Dict:
-
         batch_size = 64
 
         if isinstance(finetuned_model, BaseEstimator):
@@ -173,7 +172,7 @@ class AlgaeBloomsEval(EvalDataset):
         )
 
         test_preds = []
-        for (x, dw, month, latlons) in dl:
+        for x, dw, month, latlons in dl:
             batch_mask = self._mask_to_batch_tensor(mask, x.shape[0])
             if isinstance(finetuned_model, FineTuningModel):
                 finetuned_model.eval()
@@ -250,7 +249,7 @@ class AlgaeBloomsEval(EvalDataset):
         for _ in tqdm(range(max_epochs), desc="Finetuning"):
             model.train()
             epoch_train_loss = 0.0
-            for (x, dw, target, month, latlons) in tqdm(train_dl, desc="Training", leave=False):
+            for x, dw, target, month, latlons in tqdm(train_dl, desc="Training", leave=False):
                 opt.zero_grad()
                 batch_mask = self._mask_to_batch_tensor(mask, x.shape[0])
                 preds = model(x, dynamic_world=dw, mask=batch_mask, latlons=latlons, month=month)
