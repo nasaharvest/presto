@@ -1,6 +1,6 @@
 import json
+import urllib.request
 from pathlib import Path
-from random import shuffle
 from typing import Dict, List, Optional, Tuple, Union, cast
 
 import numpy as np
@@ -45,32 +45,35 @@ class EuroSatEval(EvalDataset):
     # this is not the true start month!
     start_month = 1
 
+    split_urls = {
+        "train": "https://storage.googleapis.com/remote_sensing_representations/eurosat-train.txt",
+        "val": "https://storage.googleapis.com/remote_sensing_representations/eurosat-val.txt",
+        "test": "https://storage.googleapis.com/remote_sensing_representations/eurosat-test.txt",
+    }
+
     def __init__(self, rgb: bool = False) -> None:
         self.name = "EuroSat" if not rgb else "EuroSat_RGB"
         self.rgb = rgb
 
     @staticmethod
-    def split_images() -> Dict[str, List[str]]:
+    def url_to_list(url: str) -> List[str]:
+        data = urllib.request.urlopen(url).read()
+        return data.decode("utf-8").split("\n")
+
+    @classmethod
+    def split_images(cls) -> Dict[str, List[str]]:
+        # updated to use the splits stored in
+        # https://storage.googleapis.com/remote_sensing_representations
+        # as per torchgeo
         train_test_split_path = data_dir / "eurosat/train_test_split.json"
         if train_test_split_path.exists():
             train_test_split = json.load(train_test_split_path.open("r"))
         else:
             # this code was only run once (the dictionary is then saved)
-            # but is saved here for clarity
-            # test ratio of 0.2 is as per https://arxiv.org/abs/1911.06721,
-            # which subsequent papers replicate
-            test_ratio = 0.2
-            train_images, test_images = [], []
-            all_image_classes = (
-                data_dir / "eurosat/ds/images/remote_sensing/otherDatasets/sentinel_2/tif"
+            train_images = cls.url_to_list(cls.split_urls["train"]) + cls.url_to_list(
+                cls.split_urls["val"]
             )
-            assert all_image_classes.exists()
-            for image_folder in all_image_classes.glob("*"):
-                images = [x.name for x in image_folder.glob("*.tif")]
-                num_test_images = int(len(images) * test_ratio)
-                shuffle(images)
-                test_images.extend(images[:num_test_images])
-                train_images.extend(images[num_test_images:])
+            test_images = cls.url_to_list(cls.split_urls["test"])
             train_test_split = {"train": train_images, "test": test_images}
             json.dump(train_test_split, train_test_split_path.open("w"))
         return train_test_split
@@ -78,6 +81,8 @@ class EuroSatEval(EvalDataset):
     @staticmethod
     def image_name_to_path(name: str) -> Path:
         class_name = name.split("_")[0]
+        if name.endswith("jpg"):
+            name = f"{name.split('.')[0]}.tif"
         return tif_files / class_name / name
 
     @staticmethod
