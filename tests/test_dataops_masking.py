@@ -9,7 +9,7 @@ from presto.dataops.pipelines.s1_s2_era5_srtm import S1_S2_ERA5_SRTM
 from presto.presto import Presto
 
 
-class TestS1S2ERA5SRTM(TestCase):
+class TestMasking(TestCase):
     def test_make_mask_rest(self):
         eo_mask, dw_mask = make_mask(strategy="group_bands", mask_ratio=0.75)
         mask = np.concatenate([eo_mask, np.expand_dims(dw_mask, -1)], -1)
