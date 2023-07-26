@@ -25,7 +25,7 @@ MASK_STRATEGIES = (
 # This is to allow a quick expansion of the mask from
 # group-channel space into real-channel space
 BAND_EXPANSION = [len(x) for x in BANDS_GROUPS_IDX.values()]
-REMAPPED_INDICES = [None] * 17
+REMAPPED_INDICES = [0] * 17
 for group_index, (group, indices) in enumerate(BANDS_GROUPS_IDX.items()):
     up_to = sum(BAND_EXPANSION[:group_index])
     for i, idx in enumerate(indices):
