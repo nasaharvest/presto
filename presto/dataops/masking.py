@@ -4,14 +4,12 @@ from random import choice, randint, sample
 from typing import Tuple
 
 import numpy as np
-from einops import repeat
 from pandas.compat._optional import import_optional_dependency
 
 from .pipelines.dynamicworld import DynamicWorld2020_2021
 from .pipelines.s1_s2_era5_srtm import (
     BANDS_GROUPS_IDX,
     NORMED_BANDS,
-    NUM_BANDS,
     NUM_TIMESTEPS,
     TIMESTEPS_IDX,
 )
@@ -22,6 +20,17 @@ MASK_STRATEGIES = (
     "chunk_timesteps",
     "random_combinations",
 )
+
+
+# This is to allow a quick expansion of the mask from
+# group-channel space into real-channel space
+BAND_EXPANSION = [len(x) for x in BANDS_GROUPS_IDX.values()]
+REMAPPED_INDICES = [0] * 17
+for group_index, (group, indices) in enumerate(BANDS_GROUPS_IDX.items()):
+    up_to = sum(BAND_EXPANSION[:group_index])
+    for i, idx in enumerate(indices):
+        REMAPPED_INDICES[idx] = up_to + i
+
 
 MaskedExample = namedtuple(
     "MaskedExample",
@@ -73,12 +82,7 @@ def make_mask(strategy: str, mask_ratio: float) -> Tuple[np.ndarray, np.ndarray]
     else:
         raise ValueError(f"Unknown strategy {strategy} not in {MASK_STRATEGIES}")
 
-    # expand the mask to reflect individual channels
-    output_mask = np.zeros((NUM_TIMESTEPS, NUM_BANDS))
-    for idx, val in enumerate(BANDS_GROUPS_IDX.values()):
-        mask_for_group = repeat(mask[:, idx], "t -> t b", b=len(val))
-        output_mask[:, val] = mask_for_group
-    return output_mask.astype(bool), dw_mask
+    return np.repeat(mask, BAND_EXPANSION, axis=1)[:, REMAPPED_INDICES], dw_mask
 
 
 @dataclass
