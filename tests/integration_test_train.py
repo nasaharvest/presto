@@ -1,4 +1,5 @@
 import os
+import re
 import subprocess
 import unittest
 from pathlib import Path
@@ -7,11 +8,8 @@ from unittest import TestCase
 
 class TestTrainScript(TestCase):
     def test_train_skip_finetuning(self):
-        model_path = Path("models/test_model0.pt")
-        if model_path.exists():
-            model_path.unlink()
 
-        subprocess.check_output(
+        out = subprocess.check_output(
             [
                 "python",
                 "train.py",
@@ -31,6 +29,11 @@ class TestTrainScript(TestCase):
             ]
         )
         print("\u2714 train.py ran successfully")
+
+        match = re.search(
+            r"Done training, best model saved to (\S+)$", out.decode("utf-8"), flags=re.MULTILINE
+        )
+        model_path = Path(match.group(1))
 
         self.assertTrue(model_path.exists())
         if model_path.exists():
