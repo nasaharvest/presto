@@ -1,93 +1,72 @@
 import json
+import urllib.request
 from pathlib import Path
-from random import shuffle
-from typing import Dict, List, Optional, Tuple, Union, cast
+from typing import Dict, List, Optional, Union, cast
 
 import numpy as np
 import torch
 import xarray
 from einops import repeat
-from google.cloud import storage
 from pyproj import Transformer
-from scipy import stats
-from sklearn.base import BaseEstimator
-from sklearn.metrics import accuracy_score, f1_score
-from torch import nn
-from torch.optim import Adam
-from torch.utils.data import DataLoader, TensorDataset
+from sklearn.metrics import accuracy_score, confusion_matrix, f1_score
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from ..dataops import NUM_BANDS, NUM_ORG_BANDS, TAR_BUCKET, DynamicWorld2020_2021
+from .. import utils
+from ..dataops import NUM_BANDS, NUM_ORG_BANDS
 from ..dataops.pipelines.s1_s2_era5_srtm import (
     BANDS,
     BANDS_GROUPS_IDX,
     REMOVED_BANDS,
-    S1_S2_ERA5_SRTM,
     S2_BANDS,
 )
 from ..model import FineTuningModel, Mosaiks1d, Seq2Seq
-from ..utils import data_dir, device
-from .eval import EvalDataset
+from ..utils import device
+from .eval import EvalDatasetWithPatches, EvalTaskWithAggregatedOutputs, Hyperparams
 
-tif_files = data_dir / "eurosat/EuroSAT_MS"
+tif_files_dir = "eurosat/EuroSAT_MS"
 
-# takes a 13,64,64 eurosat tif file, and returns a
-# (9,1,18) cropharvest eo-style file (with all bands "masked"
-# except for S2)
-INDICES_IN_TIF_FILE = list(range(16, 64, 16))
+IMAGE_SIZE = 64
 
 
-class EuroSatEval(EvalDataset):
-    regression = False
-    multilabel = False
-    num_outputs = 10
+class EuroSatDataset(EvalDatasetWithPatches):
+
+    labels_to_int = {
+        "AnnualCrop": 0,
+        "Forest": 1,
+        "HerbaceousVegetation": 2,
+        "Highway": 3,
+        "Industrial": 4,
+        "Pasture": 5,
+        "PermanentCrop": 6,
+        "Residential": 7,
+        "River": 8,
+        "SeaLake": 9,
+    }
 
     # this is not the true start month!
     start_month = 1
 
-    def __init__(self, rgb: bool = False) -> None:
-        self.name = "EuroSat" if not rgb else "EuroSat_RGB"
-        self.rgb = rgb
+    split_urls = {
+        "train": "https://storage.googleapis.com/remote_sensing_representations/eurosat-train.txt",
+        "val": "https://storage.googleapis.com/remote_sensing_representations/eurosat-val.txt",
+        "test": "https://storage.googleapis.com/remote_sensing_representations/eurosat-test.txt",
+    }
 
-    @staticmethod
-    def split_images() -> Dict[str, List[str]]:
-        train_test_split_path = data_dir / "eurosat/train_test_split.json"
-        if train_test_split_path.exists():
-            train_test_split = json.load(train_test_split_path.open("r"))
-        else:
-            # this code was only run once (the dictionary is then saved)
-            # but is saved here for clarity
-            # test ratio of 0.2 is as per https://arxiv.org/abs/1911.06721,
-            # which subsequent papers replicate
-            test_ratio = 0.2
-            train_images, test_images = [], []
-            all_image_classes = (
-                data_dir / "eurosat/ds/images/remote_sensing/otherDatasets/sentinel_2/tif"
-            )
-            assert all_image_classes.exists()
-            for image_folder in all_image_classes.glob("*"):
-                images = [x.name for x in image_folder.glob("*.tif")]
-                num_test_images = int(len(images) * test_ratio)
-                shuffle(images)
-                test_images.extend(images[:num_test_images])
-                train_images.extend(images[num_test_images:])
-            train_test_split = {"train": train_images, "test": test_images}
-            json.dump(train_test_split, train_test_split_path.open("w"))
-        return train_test_split
+    def __init__(
+        self, input_patch_size: int = 1, split: str = "train", merge_train_val: bool = True
+    ):
+        assert IMAGE_SIZE % input_patch_size == 0
+        super().__init__(
+            input_patch_size, int(IMAGE_SIZE / input_patch_size), split, merge_train_val
+        )
 
-    @staticmethod
-    def image_name_to_path(name: str) -> Path:
-        class_name = name.split("_")[0]
-        return tif_files / class_name / name
-
-    @staticmethod
-    def image_to_eo_array(tif_file: Path):
+    def image_to_eo_array(self, tif_filename: str):
+        tif_file = self.image_name_to_path(tif_filename)
         image = xarray.open_rasterio(tif_file)
         # from (e.g.) +init=epsg:32630 to epsg:32630
         crs = image.crs.split("=")[-1]
         transformer = Transformer.from_crs(crs, "EPSG:4326", always_xy=True)
-
-        arrays, latlons, labels, image_names = [], [], [], []
 
         indices_to_remove = []
         for band in REMOVED_BANDS:
@@ -97,83 +76,93 @@ class EuroSatEval(EvalDataset):
             idx for idx, x in enumerate(BANDS) if ((x in S2_BANDS) and (x not in REMOVED_BANDS))
         ]
 
-        for x_idx in INDICES_IN_TIF_FILE:
-            for y_idx in INDICES_IN_TIF_FILE:
-                vals = image.values[:, x_idx, y_idx]  # shape = (13,)
-                x, y = image.x[x_idx], image.y[y_idx]
-                lon, lat = transformer.transform(x, y)
-                latlons.append(np.array([lat, lon]))
-                eo_style_array = np.zeros([NUM_ORG_BANDS])
-                eo_style_array[kept_overall_bands] = vals[kept_s2_bands]
-                arrays.append(np.expand_dims(eo_style_array, 0))
-                labels.append(tif_file.parents[0].name)
-                image_names.append(tif_file.name)
+        eo_style_array = np.zeros([NUM_ORG_BANDS, IMAGE_SIZE, IMAGE_SIZE])
+        eo_style_array[kept_overall_bands] = image.values[kept_s2_bands]
+        lon, lat = transformer.transform(image.x, image.y)
+        lonlats = np.meshgrid(lon, lat, indexing="xy")
+
         return (
-            np.stack(arrays, axis=0),
-            np.stack(latlons, axis=0),
-            np.array(labels),
-            np.array(image_names),
+            eo_style_array,
+            lonlats,
+            np.array([self.labels_to_int[tif_file.parents[0].name]]),
         )
 
-    @classmethod
-    def tifs_to_arrays(cls, mode: str = "train"):
-        features_folder = data_dir / f"eurosat/{mode}_features"
-        features_folder.mkdir(exist_ok=True)
-
-        images_to_process = cls.split_images()[mode]
-
-        arrays, latlons, labels, image_names = [], [], [], []
-
-        for image in tqdm(images_to_process):
-            output = cls.image_to_eo_array(cls.image_name_to_path(image))
-            arrays.append(output[0])
-            latlons.append(output[1])
-            labels.append(output[2])
-            image_names.append(output[3])
-
-        np.save(features_folder / "arrays.npy", np.concatenate(arrays, axis=0))
-        np.save(features_folder / "latlons.npy", np.concatenate(latlons, axis=0))
-        np.save(features_folder / "labels.npy", np.concatenate(labels, axis=0))
-        np.save(features_folder / "image_names.npy", np.concatenate(image_names, axis=0))
+    @staticmethod
+    def url_to_list(url: str) -> List[str]:
+        data = urllib.request.urlopen(url).read()
+        return data.decode("utf-8").split("\n")
 
     @staticmethod
-    def load_npy_gcloud(path: Path) -> np.ndarray:
-        if not path.exists():
-            blob = (
-                storage.Client()
-                .bucket(TAR_BUCKET)
-                .blob(f"eval/eurosat/{path.parent.name}/{path.name}")
-            )
-            blob.download_to_filename(path)
-        return np.load(path)
+    def split_images(merge_train_val: bool = True) -> Dict[str, List[str]]:
+        # updated to use the splits stored in
+        # https://storage.googleapis.com/remote_sensing_representations
+        # as per torchgeo
+        filename = (
+            "eurosat/train_test_split.json"
+            if merge_train_val
+            else "eurosat/train_val_test_split.json"
+        )
+        split_path = utils.data_dir / filename
+        if split_path.exists():
+            train_test_split = json.load(split_path.open("r"))
+        else:
+            # this code was only run once (the dictionary is then saved)
+            # but is saved here for clarity
+            train_images = EuroSatDataset.url_to_list(EuroSatDataset.split_urls["train"])
+            test_images = EuroSatDataset.url_to_list(EuroSatDataset.split_urls["test"])
+            train_test_split = {"train": train_images, "test": test_images}
+            if merge_train_val:
+                train_test_split["train"] += EuroSatDataset.url_to_list(
+                    EuroSatDataset.split_urls["val"]
+                )
+            else:
+                train_test_split["val"] = EuroSatDataset.url_to_list(
+                    EuroSatDataset.split_urls["val"]
+                )
+            json.dump(train_test_split, split_path.open("w"))
+        return train_test_split
 
-    @classmethod
-    def load_npys(
-        cls, test: bool
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        mode = "test" if test else "train"
-        npy_folder = data_dir / f"eurosat/{mode}_features"
-        npy_folder.mkdir(exist_ok=True)
+    @staticmethod
+    def image_name_to_path(name: str) -> Path:
+        class_name = name.split("_")[0]
+        if name.endswith("jpg"):
+            name = f"{name.split('.')[0]}.tif"
+        return utils.data_dir / tif_files_dir / class_name / name
 
-        labels = cls.load_npy_gcloud(npy_folder / "labels.npy")
-        # this returns ints instead of strings, so that we can seamlessly
-        # pass it to the sklearn models
-        _, labels_to_int = np.unique(labels, return_inverse=True)
 
-        # all dynamic world values are considered masked
-        dw = np.ones((len(labels), 1)) * DynamicWorld2020_2021.class_amount
+class EuroSatEval(EvalTaskWithAggregatedOutputs):
+    regression = False
+    multilabel = False
+    num_outputs = 10
 
-        return (
-            S1_S2_ERA5_SRTM.normalize(cls.load_npy_gcloud(npy_folder / "arrays.npy")),
-            dw,
-            cls.load_npy_gcloud(npy_folder / "latlons.npy"),
-            labels_to_int,
-            cls.load_npy_gcloud(npy_folder / "image_names.npy"),
+    def __init__(
+        self,
+        rgb: bool = False,
+        input_patch_size: int = 1,
+        aggregates: List[str] = ["mean", "quantiles", "histogram"],
+        num_histogram_bins: Optional[int] = 10,
+        histogram_lower: Optional[int] = -1,
+        histogram_upper: Optional[int] = 1,
+    ) -> None:
+        self.rgb = rgb
+
+        # for each image, we will take an `input_patch_size x input_patch_size`
+        # patch, and take a spatial mean of it
+        self.input_patch_size = input_patch_size
+        assert IMAGE_SIZE % input_patch_size == 0
+        self.num_patches_per_dim = int(IMAGE_SIZE / input_patch_size)
+        self.num_patches = self.num_patches_per_dim**2
+
+        self.name = f"EuroSat_{input_patch_size}" if not rgb else f"EuroSat_RGB_{input_patch_size}"
+
+        super().__init__(
+            aggregates, self.num_patches, num_histogram_bins, histogram_lower, histogram_upper
         )
 
     def update_mask(self, mask: Optional[np.ndarray] = None):
         if not self.rgb:
             channels_lists = [x for key, x in BANDS_GROUPS_IDX.items() if "S2" in key]
+            channels_lists.append(BANDS_GROUPS_IDX["NDVI"])
             # flatten the list of lists
             default_channels = [item for sublist in channels_lists for item in sublist]
         else:
@@ -194,87 +183,86 @@ class EuroSatEval(EvalDataset):
     @torch.no_grad()
     def evaluate(
         self,
-        finetuned_model: Union[FineTuningModel, BaseEstimator],
+        finetuned_model: Union[FineTuningModel, Dict],
         pretrained_model=None,
         mask: Optional[np.ndarray] = None,
     ) -> Dict:
         updated_mask = self.update_mask(mask)
 
-        batch_size = 64
-
-        if isinstance(finetuned_model, BaseEstimator):
+        if isinstance(finetuned_model, Dict):
             assert isinstance(pretrained_model, (Seq2Seq, Mosaiks1d))
+            pred_dict: Dict[str, Dict[str, List]] = {}
+            for aggregate, model_list in finetuned_model.items():
+                pred_dict[aggregate] = {model.__class__.__name__: [] for model in model_list}
+        else:
+            raise NotImplementedError
 
-        x, dw, latlon, target, image_names = self.load_npys(test=True)
-        pix_per_image = len(INDICES_IN_TIF_FILE) ** 2
-        assert len(target) % pix_per_image == 0
-        assert len(np.unique(image_names)) == len(target) / pix_per_image
-        target = np.reshape(target, (int(len(target) / pix_per_image), pix_per_image))
-        image_names = np.reshape(
-            image_names, (int(len(image_names) / pix_per_image), pix_per_image)
-        )
-        assert (image_names.T == image_names.T[0, :]).all()
-        assert (target.T == target.T[0, :]).all()
-        image_names = image_names[:, 0]
-        target = target[:, 0]
-
-        dl = DataLoader(
-            TensorDataset(
-                torch.from_numpy(x).to(device).float(),
-                torch.from_numpy(dw).to(device).long(),
-                torch.from_numpy(latlon).to(device).float(),
-            ),
-            batch_size=batch_size,
+        test_dataset = EuroSatDataset(self.input_patch_size, split="test")
+        test_dl = DataLoader(
+            test_dataset,
+            batch_size=Hyperparams.batch_size // self.num_patches,
             shuffle=False,
+            collate_fn=EuroSatDataset.collate_fn,
+            num_workers=Hyperparams.num_workers,
         )
 
-        test_preds = []
-        for x, dw, latlons in dl:
+        labels = []
+        for x, label, dw, latlons, month in tqdm(test_dl, desc="Computing test predictions"):
+            x, dw, latlons, month = [t.to(device) for t in (x, dw, latlons, month)]
             batch_mask = self._mask_to_batch_tensor(updated_mask, x.shape[0])
-            if isinstance(finetuned_model, FineTuningModel):
-                finetuned_model.eval()
-                preds = (
-                    finetuned_model(
-                        x,
-                        dynamic_world=dw,
-                        mask=batch_mask,
-                        latlons=latlons,
-                        month=self.start_month,
+            cast(Seq2Seq, pretrained_model).eval()
+            encodings = cast(Seq2Seq, pretrained_model).encoder(
+                x,
+                dynamic_world=dw,
+                mask=batch_mask,
+                latlons=latlons,
+                month=month,
+            )
+            labels.append(
+                label.cpu()
+                .numpy()
+                .reshape(
+                    (
+                        encodings.shape[0] // self.outputs_per_image,
+                        self.outputs_per_image,
+                        *label.shape[1:],
                     )
-                    .cpu()
-                    .numpy()
-                )
-            elif isinstance(finetuned_model, BaseEstimator):
-                cast(Seq2Seq, pretrained_model).eval()
-                encodings = (
-                    cast(Seq2Seq, pretrained_model)
-                    .encoder(
-                        x,
-                        dynamic_world=dw,
-                        mask=batch_mask,
-                        latlons=latlons,
-                        month=self.start_month,
-                    )
-                    .cpu()
-                    .numpy()
-                )
-                preds = finetuned_model.predict_proba(encodings)
+                )[:, 0]
+            )
+            for aggregate, model_list in finetuned_model.items():
+                assert not torch.isnan(encodings).any()
+                reshaped_encodings = self.reshape_for_aggregate(encodings, aggregate).cpu()
+                assert not torch.isnan(reshaped_encodings).any()
+                for model in model_list:
+                    preds = model.predict(reshaped_encodings.numpy())
+                    pred_dict[aggregate][model.__class__.__name__].append(preds)
 
-            test_preds.append(preds)
-        test_preds_np = np.concatenate(test_preds, axis=0)
-        test_preds_np = np.reshape(
-            test_preds_np,
-            (int(len(test_preds_np) / pix_per_image), pix_per_image, test_preds_np.shape[-1]),
-        )
-        # then, take the mode of the model predictions
-        test_preds_np = stats.mode(np.argmax(test_preds_np, axis=-1), axis=1, keepdims=False)[0]
-
-        prefix = finetuned_model.__class__.__name__
-        return {
-            f"{self.name}: {prefix}_num_samples": len(target),
-            f"{self.name}: {prefix}_f1_score": f1_score(target, test_preds_np, average="weighted"),
-            f"{self.name}: {prefix}_accuracy_score": accuracy_score(target, test_preds_np),
-        }
+        target = np.concatenate(labels)
+        results_dict = {}
+        int_to_labels, _ = zip(*sorted(test_dataset.labels_to_int.items(), key=lambda l_i: l_i[1]))
+        for aggregate, model_pred_dict in pred_dict.items():
+            for model_name, pred_list in model_pred_dict.items():
+                test_preds_np = np.concatenate(pred_list, axis=0)
+                prefix = f"{model_name}_{aggregate}"
+                results_dict.update(
+                    {
+                        f"{self.name}: {prefix}_num_samples": len(target),
+                        f"{self.name}: {prefix}_f1_score": f1_score(
+                            target, test_preds_np, average="weighted"
+                        ),
+                        f"{self.name}: {prefix}_accuracy_score": accuracy_score(
+                            target, test_preds_np
+                        ),
+                    }
+                )
+                class_matrix = confusion_matrix(test_preds_np, target)
+                accuracies = class_matrix.diagonal() / class_matrix.sum(axis=1)
+                for f1, acc, label in zip(
+                    f1_score(target, test_preds_np, average=None), accuracies, int_to_labels
+                ):
+                    results_dict[f"{self.name}: {prefix}_f1_score_{label}"] = f1
+                    results_dict[f"{self.name}: {prefix}_accuracy_score_{label}"] = acc
+        return results_dict
 
     def finetuning_results(
         self,
@@ -285,77 +273,79 @@ class EuroSatEval(EvalDataset):
         mask = self.update_mask(mask)
         for model_mode in model_modes:
             assert model_mode in [
-                "finetune",
+                # "finetune",  # not yet implemented
                 "Regression",
                 "Random Forest",
                 "KNNat5",
                 "KNNat20",
                 "KNNat100",
             ]
-        results_dict = {}
-        if "finetune" in model_modes:
-            model = self.finetune(pretrained_model, mask)
-            results_dict.update(self.evaluate(model, None, mask))
-        sklearn_modes = [x for x in model_modes if x != "finetune"]
+        # if "finetune" in model_modes:
+        #     model = self.finetune(pretrained_model, mask)
+        #     results_dict.update(self.evaluate(model, None, mask))
+        # sklearn_modes = [x for x in model_modes if x != "finetune"]
+        sklearn_modes = model_modes
         if len(sklearn_modes) > 0:
-            x, dw, latlons, target, _ = self.load_npys(test=False)
-            sklearn_models = self.finetune_sklearn_model(
-                x,
-                target,
+            train_dl = DataLoader(
+                EuroSatDataset(self.input_patch_size, split="train", merge_train_val=True),
+                shuffle=False,
+                batch_size=Hyperparams.batch_size // self.num_patches,
+                collate_fn=EuroSatDataset.collate_fn,
+                num_workers=Hyperparams.num_workers,
+            )
+            sklearn_model_dict = self.finetune_sklearn_model(
+                train_dl,
                 pretrained_model,
-                dynamic_world=dw,
-                latlons=latlons,
                 mask=mask,
-                month=self.start_month,
                 models=sklearn_modes,
             )
-            for sklearn_model in sklearn_models:
-                results_dict.update(self.evaluate(sklearn_model, pretrained_model, mask))
-        return results_dict
+            return self.evaluate(sklearn_model_dict, pretrained_model, mask)
+        return {}
 
     def finetune(self, pretrained_model, mask: Optional[np.ndarray] = None) -> FineTuningModel:
         # TODO - where are these controlled?
-        lr, max_epochs, batch_size = 3e-4, 3, 64
-        model = self._construct_finetuning_model(pretrained_model)
+        raise NotImplementedError
+        # hyperparams = Hyperparams()
+        # prop_val_images = 0.1
+        # model = self._construct_finetuning_model(pretrained_model)
 
-        # TODO - should this be more intelligent? e.g. first learn the
-        # (randomly initialized) head before modifying parameters for
-        # the whole model?
-        opt = Adam(model.parameters(), lr=lr)
-        loss_fn = nn.CrossEntropyLoss(reduction="mean")
+        # # TODO - should this be more intelligent? e.g. first learn the
+        # # (randomly initialized) head before modifying parameters for
+        # # the whole model?
+        # opt = Adam(model.parameters(), lr=hyperparams.lr)
+        # loss_fn = nn.CrossEntropyLoss(reduction="mean")
 
-        x, dw, latlons, target, _ = self.load_npys(test=False)
+        # x, dw, latlons, target, image_names = self.load_npys(test=False)
 
-        dl = DataLoader(
-            TensorDataset(
-                torch.from_numpy(x).to(device).float(),
-                torch.from_numpy(dw).to(device).long(),
-                torch.from_numpy(latlons).to(device).float(),
-                torch.from_numpy(target).to(device).long(),
-            ),
-            batch_size=batch_size,
-            shuffle=True,
-        )
+        # unique_image_names = np.unique(image_names)
+        # num = round(prop_val_images * len(unique_image_names))
+        # val_images = np.random.choice(unique_image_names, size=num, replace=False)
+        # val_filter = np.isin(image_names, val_images)
 
-        train_loss = []
-        for _ in range(max_epochs):
-            model.train()
-            epoch_train_loss = 0.0
-            for x, dw, latlons, y in dl:
-                opt.zero_grad()
-                b_mask = self._mask_to_batch_tensor(mask, x.shape[0])
-                preds = model(
-                    x,
-                    dynamic_world=dw,
-                    mask=b_mask,
-                    latlons=latlons,
-                    month=self.start_month,
-                )
-                loss = loss_fn(preds, y)
-                epoch_train_loss += loss.item()
-                loss.backward()
-                opt.step()
-            train_loss.append(epoch_train_loss / len(dl))
+        # train_dl = DataLoader(
+        #     TensorDataset(
+        #         torch.from_numpy(x[~val_filter]).to(device).float(),
+        #         torch.from_numpy(dw[~val_filter]).to(device).long(),
+        #         torch.from_numpy(latlons[~val_filter]).to(device).float(),
+        #         torch.from_numpy(target[~val_filter]).to(device).long(),
+        #         torch.full(target[~val_filter].shape[:1], self.start_month, device=device).long(),
+        #     ),
+        #     batch_size=hyperparams.batch_size,
+        #     shuffle=True,
+        # )
 
-        model.eval()
-        return model
+        # val_dl = DataLoader(
+        #     TensorDataset(
+        #         torch.from_numpy(x[val_filter]).to(device).float(),
+        #         torch.from_numpy(dw[val_filter]).to(device).long(),
+        #         torch.from_numpy(latlons[val_filter]).to(device).float(),
+        #         torch.from_numpy(target[val_filter]).to(device).long(),
+        #         torch.full(target[val_filter].shape[:1], self.start_month, device=device).long(),
+        #     ),
+        #     batch_size=hyperparams.batch_size,
+        #     shuffle=False,
+        # )
+
+        # return self.finetune_pytorch_model(
+        #     model, hyperparams, opt, train_dl, val_dl, loss_fn, loss_fn, mask
+        # )

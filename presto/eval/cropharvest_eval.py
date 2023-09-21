@@ -16,12 +16,12 @@ from sklearn.metrics import f1_score
 from sklearn.model_selection import train_test_split
 from torch import nn
 from torch.optim import SGD, Adam
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, TensorDataset
 from tqdm import tqdm
 
 from ..dataops import S1_S2_ERA5_SRTM, TAR_BUCKET
 from ..model import FineTuningModel, Mosaiks1d, Seq2Seq
-from ..utils import device
+from ..utils import DEFAULT_SEED, device
 from .cropharvest_extensions import (
     DEFAULT_NUM_TIMESTEPS,
     CropHarvest,
@@ -31,17 +31,18 @@ from .cropharvest_extensions import (
     MultiClassCropHarvest,
     cropharvest_data_dir,
 )
-from .eval import EvalDataset
+from .eval import EvalTask, Hyperparams
 
 
 @memoized
 def get_eval_datasets(normalize: bool = False, ignore_dynamic_world: bool = False):
     return CropHarvest.create_benchmark_datasets(
-        Path(cropharvest_data_dir), normalize=normalize, ignore_dynamic_world=ignore_dynamic_world
+        cropharvest_data_dir(), normalize=normalize, ignore_dynamic_world=ignore_dynamic_world
     )
 
 
-def download_cropharvest_data(root: Path = cropharvest_data_dir):
+def download_cropharvest_data(root_name: str = ""):
+    root = Path(root_name) if root_name != "" else cropharvest_data_dir()
     if not root.exists():
         root.mkdir()
         CropHarvest(root, download=True)
@@ -54,7 +55,7 @@ def download_cropharvest_data(root: Path = cropharvest_data_dir):
             extract_archive(root / f"{gcloud_path}.tar.gz", remove_tar=True)
 
 
-class CropHarvestEval(EvalDataset):
+class CropHarvestEval(EvalTask):
     regression = False
     multilabel = False
     num_outputs = 1
@@ -62,7 +63,11 @@ class CropHarvestEval(EvalDataset):
     num_timesteps = None
 
     def __init__(
-        self, country: str, ignore_dynamic_world: bool = False, num_timesteps: Optional[int] = None
+        self,
+        country: str,
+        ignore_dynamic_world: bool = False,
+        num_timesteps: Optional[int] = None,
+        seed: int = DEFAULT_SEED,
     ):
         download_cropharvest_data()
 
@@ -78,6 +83,7 @@ class CropHarvestEval(EvalDataset):
         suffix = f"{suffix}_{num_timesteps}" if num_timesteps is not None else suffix
 
         self.name = f"CropHarvest_{country}{suffix}"
+        super().__init__(seed)
 
     @staticmethod
     def export_dynamic_world(test: bool = False):
@@ -99,9 +105,9 @@ class CropHarvestEval(EvalDataset):
             dataset = "-".join(parts[1:])
             return int(index), dataset
 
-        input_folder = cropharvest_data_dir / DynamicWorldExporter.output_folder_name
-        output_folder = cropharvest_data_dir / "features/dynamic_world_arrays"
-        labels = geopandas.read_file(cropharvest_data_dir / LABELS_FILENAME)
+        input_folder = cropharvest_data_dir() / DynamicWorldExporter.output_folder_name
+        output_folder = cropharvest_data_dir() / "features/dynamic_world_arrays"
+        labels = geopandas.read_file(cropharvest_data_dir() / LABELS_FILENAME)
 
         for filepath in tqdm(list(input_folder.glob("*.tif"))):
             index, dataset = process_filename(filepath.stem)
@@ -117,10 +123,10 @@ class CropHarvestEval(EvalDataset):
 
     @staticmethod
     def create_dynamic_world_test_h5_instances():
-        engineer = Engineer(cropharvest_data_dir)
-        engineer.test_eo_files = cropharvest_data_dir / "test_dynamic_world_data"
-        engineer.test_savedir = cropharvest_data_dir / "test_dynamic_world_features"
-        engineer.eo_files = cropharvest_data_dir / "dynamic_world_data"
+        engineer = Engineer(cropharvest_data_dir())
+        engineer.test_eo_files = cropharvest_data_dir() / "test_dynamic_world_data"
+        engineer.test_savedir = cropharvest_data_dir() / "test_dynamic_world_features"
+        engineer.eo_files = cropharvest_data_dir() / "dynamic_world_data"
         engineer.create_h5_test_instances()
 
     def truncate_timesteps(self, x):
@@ -247,15 +253,26 @@ class CropHarvestEval(EvalDataset):
 
         sklearn_modes = [x for x in model_modes if x != "finetune"]
         if len(sklearn_modes) > 0:
-            x, dw, latlons, y = self.dataset.as_array()
+            array, dw, latlons, y = self.dataset.as_array()
+            month = np.array([self.start_month] * array.shape[0])
+            dl = DataLoader(
+                TensorDataset(
+                    torch.from_numpy(
+                        self.truncate_timesteps(S1_S2_ERA5_SRTM.normalize(array))
+                    ).float(),
+                    torch.from_numpy(y).long(),
+                    torch.from_numpy(self.truncate_timesteps(dw)).long(),
+                    torch.from_numpy(latlons).float(),
+                    torch.from_numpy(month).long(),
+                ),
+                batch_size=Hyperparams.batch_size,
+                shuffle=False,
+                num_workers=Hyperparams.num_workers,
+            )
             sklearn_models = self.finetune_sklearn_model(
-                self.truncate_timesteps(S1_S2_ERA5_SRTM.normalize(x)),
-                y,
+                dl,
                 pretrained_model,
-                dynamic_world=self.truncate_timesteps(dw),
-                latlons=latlons,
                 mask=self.truncate_timesteps(mask),
-                month=self.start_month,
                 models=sklearn_modes,
             )
             for sklearn_model in sklearn_models:
@@ -272,10 +289,11 @@ class CropHarvestMultiClassValidation(CropHarvestEval):
         val_ratio: float = 0.2,
         n_per_class: Optional[int] = 100,
         ignore_dynamic_world: bool = False,
+        seed: int = DEFAULT_SEED,
     ):
         download_cropharvest_data()
         task = Task(normalize=False)
-        labels = CropHarvestLabels(cropharvest_data_dir)
+        labels = CropHarvestLabels(cropharvest_data_dir())
         paths_and_y = labels.construct_fao_classification_labels(task, filter_test=True)
 
         y = [x[1] for x in paths_and_y]
@@ -303,7 +321,8 @@ class CropHarvestMultiClassValidation(CropHarvestEval):
 
         name_suffix = f"_{n_per_class}" if n_per_class is not None else ""
         dw_suffix = "_no_dynamic_world" if ignore_dynamic_world else ""
-        self.name = f"CropHarvest_multiclass_global{name_suffix}{dw_suffix}"
+        self.name = f"CropHarvest_multiclass_global{name_suffix}{dw_suffix}_{seed}"
+        self.seed = seed
 
     @torch.no_grad()
     def evaluate(
@@ -312,15 +331,15 @@ class CropHarvestMultiClassValidation(CropHarvestEval):
         pretrained_model=None,
         mask: Optional[np.ndarray] = None,
     ) -> Dict:
-        batch_size = 64
 
         if isinstance(finetuned_model, BaseEstimator):
             assert isinstance(pretrained_model, (Seq2Seq, Mosaiks1d))
 
         dl = DataLoader(
             self.eval_dataset,
-            batch_size=batch_size,
+            batch_size=Hyperparams.batch_size,
             shuffle=False,
+            num_workers=Hyperparams.num_workers,
         )
 
         test_preds, test_true = [], []
@@ -373,23 +392,24 @@ class CropHarvestMultiClassValidation(CropHarvestEval):
 
     def finetune(self, pretrained_model, mask: Optional[np.ndarray] = None) -> FineTuningModel:
         # TODO - where are these controlled?
-        lr, max_epochs, batch_size = 3e-4, 3, 64
+        hyperparams = Hyperparams(max_epochs=3, batch_size=64)
         model = self._construct_finetuning_model(pretrained_model)
 
         # TODO - should this be more intelligent? e.g. first learn the
         # (randomly initialized) head before modifying parameters for
         # the whole model?
-        opt = Adam(model.parameters(), lr=lr)
+        opt = Adam(model.parameters(), lr=hyperparams.lr)
         loss_fn = nn.CrossEntropyLoss(reduction="mean")
 
         train_dl = DataLoader(
             self.dataset,
-            batch_size=batch_size,
+            batch_size=hyperparams.batch_size,
             shuffle=True,
+            num_workers=hyperparams.num_workers,
         )
 
         train_loss = []
-        for _ in range(max_epochs):
+        for _ in range(hyperparams.max_epochs):
             model.train()
             epoch_train_loss = 0.0
             for x, dw, latlons, y in train_dl:
