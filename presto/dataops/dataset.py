@@ -1,3 +1,4 @@
+import logging
 import os
 import random
 import shutil
@@ -18,8 +19,7 @@ from openmapflow.ee_boundingbox import EEBoundingBox
 from shapely import geometry
 from tqdm import tqdm
 
-from presto.utils import data_dir
-
+from .. import utils
 from .masking import MaskedExample, MaskParams
 from .pipelines.dynamicworld import DynamicWorldMonthly2020_2021, pad_array
 from .pipelines.ee_pipeline import EE_BUCKET, NPY_BUCKET, EEPipeline
@@ -29,6 +29,8 @@ from .pipelines.worldcover2020 import WorldCover2020
 METRES_PER_PATCH = 50000  # Ensures EarthEngine exports don't time out
 TAR_BUCKET = "lem-assets2"
 N_RECORDS_IN_SHARD = 144
+
+logger = logging.getLogger("__main__")
 
 
 class Dataset:
@@ -74,7 +76,7 @@ class Dataset:
         tar_dir = Path(prefix)
         tar_dir.mkdir(exist_ok=True)
 
-        print("Downloading npy files")
+        logger.info("Downloading npy files")
         # Download numpy files (faster than using Python API)
         os.system(f"gcloud storage cp -n -r gs://{NPY_BUCKET}/{prefix} .")
 
@@ -143,7 +145,7 @@ class Dataset:
             for p in pipeline_names:
                 text += f" \t{p}: {len(npy_polygon_ids[p])}/{n_polygon_ids}\n"
             text += f" Complete tar: {n_tars}/1\n"
-            print(text)
+            logger.info(text)
             return text
 
         if self._does_tar_already_exist(prefix):
@@ -244,7 +246,7 @@ class Dataset:
         status_text += f"{status_checks[0]} Earth Engine export: {status_exporting}\n"
         status_text += f"{status_checks[1]} Numpy processing: {status_npy_processing}\n"
         status_text += f"{status_checks[2]} Complete tars: {status_tar_complete}\n"
-        print(status_text)
+        logger.info(status_text)
         return status_text
 
     def _decode_file_from_webdataset_tar(self):
@@ -260,9 +262,9 @@ class Dataset:
         steps = [
             wds.SimpleShardList(
                 f"pipe:gcloud storage cat {url}" if url.startswith("gs://") else url
-            )
+            ),
+            wds.cached_tarfile_to_samples(cache_dir=f"{utils.data_dir}/tars/{Path(url).stem}"),
         ]
-        steps.append(wds.cached_tarfile_to_samples(cache_dir=f"data/tars/{Path(url).stem}"))
 
         if shuffle:
             steps.append(wds.shuffle(1000, rng=rng))  # Shuffles samples inside tarfile
@@ -307,13 +309,12 @@ class S1_S2_ERA5_SRTM_DynamicWorld_WorldCover_2020_2021(Dataset):
 
         class_df = pd.read_csv(f"https://storage.googleapis.com/{TAR_BUCKET}/esa_grid.csv")
         class_df = class_df.drop(["geometry"], axis=1)
-        esa_grid = gpd.read_file(data_dir / "esa_worldcover_2020_grid.geojson")
+        esa_grid = gpd.read_file(utils.data_dir / "esa_worldcover_2020_grid.geojson")
         df = esa_grid.merge(class_df, on="ll_tile", how="left")
 
         tar_stats = {}
 
         for tar_folder in tar_folders:
-
             tile_stats = defaultdict(lambda: {"num_files": 0, "size_bytes": 0, "classes": {}})
 
             for blob in storage.Client().list_blobs(TAR_BUCKET, prefix=tar_folder):
@@ -342,8 +343,8 @@ class S1_S2_ERA5_SRTM_DynamicWorld_WorldCover_2020_2021(Dataset):
         return tar_stats
 
     def create_webdataset_tars(self, tiles: List[str]):
-        print("Loading tile geometries")
-        df = gpd.read_file(data_dir / "esa_worldcover_2020_grid.geojson")
+        logger.info("Loading tile geometries")
+        df = gpd.read_file(utils.data_dir / "esa_worldcover_2020_grid.geojson")
 
         text = ""
         for tile in tiles:
@@ -353,11 +354,11 @@ class S1_S2_ERA5_SRTM_DynamicWorld_WorldCover_2020_2021(Dataset):
                 polygon=geom_series.iloc[0], prefix=tile
             )
 
-        with open(data_dir / "tile_processing.txt", "w") as f:
+        with open(utils.data_dir / "tile_processing.txt", "w") as f:
             f.write(text)
 
         tile_stats = self._generate_stats()
-        with open(data_dir / "tile_stats.yaml", "w") as yaml_file:
+        with open(utils.data_dir / "tile_stats.yaml", "w") as yaml_file:
             yaml.dump(tile_stats, yaml_file, default_flow_style=False)
 
     def _tuples_from_decoded_files(self, iter: Iterable[Dict[str, np.ndarray]]) -> Iterable[Tuple]:
@@ -400,14 +401,14 @@ class S1_S2_ERA5_SRTM_DynamicWorldMonthly_2020_2021(Dataset):
         super().__init__(pipelines=(self.eo_pipeline, self.dynamicworld_pipeline))
 
     def create_webdataset_tars(self, shard_ids: List[int] = [0]):
-        print("Loading Dynamic World geometries")
-        gdf = gpd.read_file(data_dir / "dynamic_world_samples.geojson")
+        logger.info("Loading Dynamic World geometries")
+        gdf = gpd.read_file(utils.data_dir / "dynamic_world_samples.geojson")
 
         if "shard" not in gdf.columns:
             np.random.seed(0)
             n_shards = len(gdf) // N_RECORDS_IN_SHARD
             gdf["shard"] = np.random.choice(a=n_shards, size=len(gdf), replace=True)
-            gdf.to_file(data_dir / "dynamic_world_samples.geojson", driver="GeoJSON")
+            gdf.to_file(utils.data_dir / "dynamic_world_samples.geojson", driver="GeoJSON")
 
         text = ""
         for i in shard_ids:
@@ -419,15 +420,15 @@ class S1_S2_ERA5_SRTM_DynamicWorldMonthly_2020_2021(Dataset):
                 prefix=f"dw_{N_RECORDS_IN_SHARD}_shard_{i}",
             )
 
-        print("Saving logs and geojson")
-        with open(data_dir / "shard_processing.txt", "w") as f:
+        logger.info("Saving logs and geojson")
+        with open(utils.data_dir / "shard_processing.txt", "w") as f:
             f.write(text)
 
         active_shards = gdf[gdf["shard"].isin(shard_ids)].copy()
 
         active_shards["geometry"] = active_shards.to_crs("+proj=cea").centroid.to_crs(gdf.crs)
         active_shards.to_file(
-            data_dir / "dynamic_world_samples_active_shards.geojson", driver="GeoJSON"
+            utils.data_dir / "dynamic_world_samples_active_shards.geojson", driver="GeoJSON"
         )
 
     def _tuples_from_decoded_files(self, iter: Iterable[Dict[str, np.ndarray]]) -> Iterable[Tuple]:
