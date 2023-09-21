@@ -1,9 +1,10 @@
 import argparse
 import json
+import logging
 import os
 import warnings
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Tuple, cast
 
 import matplotlib.pyplot as plt
 import torch
@@ -11,6 +12,7 @@ import torch.nn as nn
 import webdataset as wds
 from torch import optim
 from tqdm import tqdm
+from wandb.sdk.wandb_run import Run
 
 from presto import Presto
 from presto.dataops import BANDS_GROUPS_IDX, MASK_STRATEGIES, MaskParams, plot_masked
@@ -23,21 +25,45 @@ from presto.eval import (
     CropHarvestEval,
     CropHarvestMultiClassValidation,
     EuroSatEval,
-    EvalDataset,
+    EvalTask,
     FuelMoistureEval,
     TreeSatEval,
 )
 from presto.model import LossWrapper, adjust_learning_rate, param_groups_weight_decay
-from presto.utils import config_dir, device, seed_everything
+from presto.utils import (
+    DEFAULT_SEED,
+    config_dir,
+    device,
+    initialize_logging,
+    seed_everything,
+    timestamp_dirname,
+    update_data_dir,
+)
 
+logger = logging.getLogger("__main__")
 os.environ["GOOGLE_CLOUD_PROJECT"] = "large-earth-model"
 
 # Parse command line arguments
 argparser = argparse.ArgumentParser()
 argparser.add_argument("--model_name", type=str, default="")
 argparser.add_argument("--path_to_config", type=str, default="")
+argparser.add_argument(
+    "--output_dir",
+    type=str,
+    default="",
+    help="Parent directory to save output to, <output_dir>/wandb/ "
+    "and <output_dir>/output/ will be written to. "
+    "Leave empty to use the directory you are running this file from.",
+)
+argparser.add_argument(
+    "--data_dir",
+    type=str,
+    default="",
+    help="Data is stored in <data_dir>/data. "
+    "Leave empty to use the directory you are running this file from.",
+)
 argparser.add_argument("--n_epochs", type=int, default=20)
-argparser.add_argument("--val_per_n_steps", type=int, default=100)
+argparser.add_argument("--val_per_n_steps", type=int, default=1000)
 argparser.add_argument(
     "--cropharvest_per_n_validations",
     type=int,
@@ -47,23 +73,23 @@ argparser.add_argument(
 argparser.add_argument(
     "--cropharvest_val_n_per_class",
     type=int,
-    default=100,
+    default=-1,
     help="-1 for no limit",
 )
-argparser.add_argument("--max_learning_rate", type=float, default=0.0025)
+argparser.add_argument("--max_learning_rate", type=float, default=0.001)
 argparser.add_argument("--min_learning_rate", type=float, default=0.0)
-argparser.add_argument("--warmup_epochs", type=int, default=4)
+argparser.add_argument("--warmup_epochs", type=int, default=2)
 
 argparser.add_argument("--weight_decay", type=float, default=0.05)
 argparser.add_argument(
     "--dynamic_world_loss_weight",
     type=float,
-    default=1,
+    default=2,
     help="Each dynamic world instance we be weighted by this amount relative to each eo instance",
 )
-argparser.add_argument("--batch_size", type=int, default=8192)
+argparser.add_argument("--batch_size", type=int, default=4096)
 argparser.add_argument(
-    "--dataloader_length", type=int, default=2464, help="-1 to re-estimate dataloader length"
+    "--dataloader_length", type=int, default=5950, help="-1 to re-estimate dataloader length"
 )
 argparser.add_argument(
     "--mask_strategies",
@@ -77,21 +103,30 @@ argparser.add_argument(
     nargs="+",
     help="`all` will use all available masking strategies (including single bands)",
 )
-argparser.add_argument("--mask_ratio", type=float, default=0.5)
+argparser.add_argument(
+    "--eval_seeds",
+    type=int,
+    default=[0, DEFAULT_SEED, 48],
+    nargs="+",
+    help="seeds to use for eval tasks",
+)
+argparser.add_argument("--mask_ratio", type=float, default=0.75)
+argparser.add_argument("--seed", type=int, default=DEFAULT_SEED)
 argparser.add_argument("--wandb", dest="wandb", action="store_true")
 argparser.add_argument("--wandb_plots", type=int, default=3)
+argparser.add_argument("--wandb_org", type=str, default="nasa-harvest")
 
 argparser.add_argument(
     "--train_url",
     type=str,
     default=f"gs://{TAR_BUCKET}/S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021_tars/"
-    + "dw_144_shard_{0..48}.tar",
+    + "dw_144_shard_{0..58}.tar",
 )
 argparser.add_argument(
     "--val_url",
     type=str,
     default=f"gs://{TAR_BUCKET}/S1_S2_ERA5_SRTM_2020_2021_DynamicWorldMonthly2020_2021_tars/"
-    + "dw_144_shard_49.tar",
+    + "dw_144_shard_59.tar",
 )
 argparser.add_argument("--skip_finetuning", dest="skip_finetuning", action="store_true")
 
@@ -100,7 +135,35 @@ argparser.set_defaults(skip_finetuning=False)
 args = argparser.parse_args().__dict__
 
 model_name = args["model_name"]
+seed: int = args["seed"]
 path_to_config = args["path_to_config"]
+wandb_enabled: bool = args["wandb"]
+wandb_plots: int = args["wandb_plots"]
+wandb_org: str = args["wandb_org"]
+
+seed_everything(seed)
+
+output_parent_dir = Path(args["output_dir"]) if args["output_dir"] else Path(__file__).parent
+run_id = None
+if wandb_enabled:
+    import wandb
+
+    run = wandb.init(
+        entity=wandb_org,
+        project="lem",
+        dir=output_parent_dir,
+    )
+    run_id = cast(Run, run).id
+
+logging_dir = output_parent_dir / "output" / timestamp_dirname(run_id)
+logging_dir.mkdir(exist_ok=True, parents=True)
+initialize_logging(logging_dir)
+logger.info("Using output dir: %s" % logging_dir)
+
+data_dir = args["data_dir"]
+if data_dir != "":
+    update_data_dir(data_dir)
+
 num_epochs = args["n_epochs"]
 val_per_n_steps = args["val_per_n_steps"]
 cropharvest_per_n_validations = args["cropharvest_per_n_validations"]
@@ -111,9 +174,8 @@ min_learning_rate = args["min_learning_rate"]
 warmup_epochs = args["warmup_epochs"]
 weight_decay = args["weight_decay"]
 batch_size = args["batch_size"]
+eval_seeds = args["eval_seeds"]
 
-wandb_enabled: bool = args["wandb"]
-wandb_plots: int = args["wandb_plots"]
 mask_strategies: Tuple[str, ...] = tuple(args["mask_strategies"])
 if (len(mask_strategies) == 1) and (mask_strategies[0] == "all"):
     mask_strategies = MASK_STRATEGIES
@@ -137,12 +199,8 @@ if path_to_config == "":
     path_to_config = config_dir / "default.json"
 model_kwargs = json.load(Path(path_to_config).open("r"))
 
-if wandb_enabled:
-    import wandb
-
-seed_everything()
 # ------------ Dataloaders -------------------------------------
-print("Setting up dataloaders")
+logger.info("Setting up dataloaders")
 mask_params = MaskParams(mask_strategies, mask_ratio)
 
 
@@ -157,11 +215,11 @@ train_dataloader = wds.WebLoader(train_dataset, batch_size=batch_size)
 val_dataloader = wds.WebLoader(val_dataset, batch_size=batch_size)
 
 if dataloader_length == -1:
-    print("Finding train dataloader length")
+    logger.info("Finding train dataloader length")
     dataloader_length = 0
     for _ in train_dataloader:
         dataloader_length += 1
-    print("train_dataloader length: ", dataloader_length)
+    logger.info("train_dataloader length: ", dataloader_length)
 
 
 if cropharvest_per_n_validations != 0:
@@ -171,8 +229,8 @@ if cropharvest_per_n_validations != 0:
 
 
 # ------------ Model -----------------------------------------
-print("Setting up model")
-model = Presto.construct(band_groups=BANDS_GROUPS_IDX, **model_kwargs)
+logger.info("Setting up model")
+model = Presto.construct(**model_kwargs)
 model.to(device)
 
 # ------------ Model hyperparameters -------------------------------------
@@ -189,12 +247,13 @@ training_config = {
     "eo_loss": mse.loss.__class__.__name__,
     "dynamic_world_loss": ce.loss.__class__.__name__,
     "device": device,
+    "logging_dir": logging_dir,
     **args,
     **model_kwargs,
 }
 
 if wandb_enabled:
-    run = wandb.init(entity="nasa-harvest", project="lem", config=training_config)
+    wandb.config.update(training_config)
 
     examples = []
 
@@ -248,7 +307,6 @@ num_validations = 0
 
 with tqdm(range(num_epochs), desc="Epoch") as tqdm_epoch:
     for epoch in tqdm_epoch:
-
         # ------------------------ Training ----------------------------------------
         total_train_loss = 0.0
         total_eo_train_loss = 0.0
@@ -276,6 +334,10 @@ with tqdm(range(num_epochs), desc="Epoch") as tqdm_epoch:
             y_pred, dw_pred = model(
                 x, mask=mask, dynamic_world=x_dw, latlons=latlons, month=start_month
             )
+            # set all SRTM timesteps except the first one to unmasked, so that
+            # they will get ignored by the loss function even if the SRTM
+            # value was masked
+            mask[:, 1:, BANDS_GROUPS_IDX["SRTM"]] = False
             loss = mse(y_pred[mask], y[mask])
             dw_loss = ce(dw_pred[dw_mask], y_dw[dw_mask])
             num_eo_masked, num_dw_masked = len(y_pred[mask]), len(dw_pred[dw_mask])
@@ -322,6 +384,10 @@ with tqdm(range(num_epochs), desc="Epoch") as tqdm_epoch:
                         y_pred, dw_pred = model(
                             x, mask=mask, dynamic_world=x_dw, latlons=latlons, month=start_month
                         )
+                        # set all SRTM timesteps except the first one to unmasked, so that
+                        # they will get ignored by the loss function even if the SRTM
+                        # value was masked
+                        mask[:, 1:, BANDS_GROUPS_IDX["SRTM"]] = False
                         loss = mse(y_pred[mask], y[mask])
                         dw_loss = ce(dw_pred[dw_mask], y_dw[dw_mask])
                         num_eo_masked, num_dw_masked = len(y_pred[mask]), len(dw_pred[dw_mask])
@@ -346,7 +412,7 @@ with tqdm(range(num_epochs), desc="Epoch") as tqdm_epoch:
                     and wandb_enabled
                 ):
                     results = cropharvest_validation.finetuning_results(
-                        model, model_modes=["finetune", "Regression", "Random Forest"]
+                        model, model_modes=["Regression", "Random Forest"]
                     )
                     results["epoch"] = epoch
                     wandb.log(results)
@@ -383,14 +449,12 @@ with tqdm(range(num_epochs), desc="Epoch") as tqdm_epoch:
                     lowest_validation_loss = val_loss
                     best_val_epoch = epoch
 
-                    model_path = Path("models")
-                    model_path.mkdir(exist_ok=True)
+                    model_path = logging_dir / Path("models")
+                    model_path.mkdir(exist_ok=True, parents=True)
 
-                    if wandb_enabled and run:
-                        model_path = model_path / run.id
-                        model_path.mkdir(exist_ok=True)
-
-                    torch.save(model.state_dict(), model_path / f"{model_name}{epoch}.pt")
+                    best_model_path = model_path / f"{model_name}{epoch}.pt"
+                    logger.info(f"Saving best model to: {best_model_path}")
+                    torch.save(model.state_dict(), best_model_path)
 
                 # reset training logging
                 total_train_loss = 0.0
@@ -411,38 +475,84 @@ with tqdm(range(num_epochs), desc="Epoch") as tqdm_epoch:
 
                 model.train()
 
+logger.info(f"Done training, best model saved to {best_model_path}")
+
 if not skip_finetuning:
     # retreive the best model
-    print("Loading best model")
-    best_model = torch.load(model_path / f"{model_name}{best_val_epoch}.pt")
+    logger.info("Loading best model: %s" % best_model_path)
+    best_model = torch.load(best_model_path)
     model.load_state_dict(best_model)
 
-    print("Loading evaluation tasks")
-    eval_task_list: List[EvalDataset] = [
-        FuelMoistureEval(),
-        AlgaeBloomsEval(),
-        CropHarvestEval("Kenya"),
-        CropHarvestEval("Togo"),
-        CropHarvestEval("Brazil"),
-        CropHarvestEval("Kenya", ignore_dynamic_world=True),
-        CropHarvestEval("Togo", ignore_dynamic_world=True),
-        CropHarvestEval("Brazil", ignore_dynamic_world=True),
-        EuroSatEval(),
-        EuroSatEval(rgb=True),
-        TreeSatEval(),
-        TreeSatEval(subset="S1"),
-        TreeSatEval(subset="S2"),
+    logger.info("Loading evaluation tasks")
+    eval_task_list: List[EvalTask] = [
+        *[CropHarvestEval("Kenya", ignore_dynamic_world=True, seeds=[s]) for s in eval_seeds],
+        *[CropHarvestEval("Togo", ignore_dynamic_world=True, seeds=[s]) for s in eval_seeds],
+        *[CropHarvestEval("Brazil", ignore_dynamic_world=True, seeds=[s]) for s in eval_seeds],
+        *[FuelMoistureEval(seeds=[s]) for s in eval_seeds],
+        *[AlgaeBloomsEval(seeds=[s]) for s in eval_seeds],
+        # no seeds for EuroSat, which we evaluate using
+        # a KNN classifier
+        EuroSatEval(rgb=True, input_patch_size=32),
+        EuroSatEval(rgb=True, input_patch_size=16),
+        EuroSatEval(rgb=True, input_patch_size=8),
+        EuroSatEval(rgb=True, input_patch_size=4),
+        EuroSatEval(rgb=True, input_patch_size=2),
+        EuroSatEval(rgb=True, input_patch_size=1),
+        EuroSatEval(rgb=False, input_patch_size=32),
+        EuroSatEval(rgb=False, input_patch_size=16),
+        EuroSatEval(rgb=False, input_patch_size=8),
+        EuroSatEval(rgb=False, input_patch_size=4),
+        EuroSatEval(rgb=False, input_patch_size=2),
+        EuroSatEval(rgb=False, input_patch_size=1),
+        TreeSatEval("S1", input_patch_size=1, seeds=eval_seeds),
+        TreeSatEval("S2", input_patch_size=1, seeds=eval_seeds),
+        TreeSatEval("S1", input_patch_size=2, seeds=eval_seeds),
+        TreeSatEval("S2", input_patch_size=2, seeds=eval_seeds),
+        TreeSatEval("S1", input_patch_size=3, seeds=eval_seeds),
+        TreeSatEval("S2", input_patch_size=3, seeds=eval_seeds),
+        TreeSatEval("S1", input_patch_size=6, seeds=eval_seeds),
+        TreeSatEval("S2", input_patch_size=6, seeds=eval_seeds),
+        *[CropHarvestEval("Kenya", seeds=[s]) for s in eval_seeds],
+        *[CropHarvestEval("Togo", seeds=[s]) for s in eval_seeds],
+        *[CropHarvestEval("Brazil", seeds=[s]) for s in eval_seeds],
     ]
+    # add CropHarvest over time
+    for seed in eval_seeds:
+        eval_task_list.extend(
+            [
+                CropHarvestEval("Togo", ignore_dynamic_world=True, num_timesteps=x, seeds=[seed])
+                for x in range(1, 12)
+            ]
+        )
+        eval_task_list.extend(
+            [
+                CropHarvestEval("Kenya", ignore_dynamic_world=True, num_timesteps=x, seeds=[seed])
+                for x in range(1, 12)
+            ]
+        )
+    result_dict = {}
     for eval_task in tqdm(eval_task_list, desc="Full Evaluation"):
         model_modes = ["finetune", "Regression", "Random Forest"]
         if "EuroSat" in eval_task.name:
-            model_modes.extend(["KNNat5", "KNNat20", "KNNat100"])
-        print("\n" + eval_task.name)
+            model_modes = ["Regression", "Random Forest", "KNNat5", "KNNat20", "KNNat100"]
+        if "TreeSat" in eval_task.name:
+            model_modes = ["Random Forest"]
+        logger.info(eval_task.name)
+
         results = eval_task.finetuning_results(model, model_modes=model_modes)
+        result_dict.update(results)
+
         if wandb_enabled:
             wandb.log(results)
+
+        logger.info(json.dumps(results, indent=2))
         eval_task.clear_data()
+
+    eval_results_file = logging_dir / "results.json"
+    logger.info("Saving eval results to file %s" % eval_results_file)
+    with open(eval_results_file, "w") as f:
+        json.dump(result_dict, f)
 
 if wandb_enabled and run:
     run.finish()
-    print(f"Wandb url: {run.url}")
+    logger.info(f"Wandb url: {run.url}")
