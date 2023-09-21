@@ -42,9 +42,9 @@ class FuelMoistureEval(EvalTask):
     multilabel = False
     num_outputs = 1
 
-    def __init__(self, seed: int = utils.DEFAULT_SEED) -> None:
+    def __init__(self, seeds: List[int] = [utils.DEFAULT_SEED]) -> None:
         self.labels = self.load_labels()
-        super().__init__(seed)
+        super().__init__(seeds)
 
     @staticmethod
     def split_sites(sites: List[str]) -> Dict[str, str]:

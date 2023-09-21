@@ -67,7 +67,7 @@ class CropHarvestEval(EvalTask):
         country: str,
         ignore_dynamic_world: bool = False,
         num_timesteps: Optional[int] = None,
-        seed: int = DEFAULT_SEED,
+        seeds: List[int] = [DEFAULT_SEED],
     ):
         download_cropharvest_data()
 
@@ -83,7 +83,7 @@ class CropHarvestEval(EvalTask):
         suffix = f"{suffix}_{num_timesteps}" if num_timesteps is not None else suffix
 
         self.name = f"CropHarvest_{country}{suffix}"
-        super().__init__(seed)
+        super().__init__(seeds)
 
     @staticmethod
     def export_dynamic_world(test: bool = False):
@@ -289,7 +289,7 @@ class CropHarvestMultiClassValidation(CropHarvestEval):
         val_ratio: float = 0.2,
         n_per_class: Optional[int] = 100,
         ignore_dynamic_world: bool = False,
-        seed: int = DEFAULT_SEED,
+        seeds: List[int] = [DEFAULT_SEED],
     ):
         download_cropharvest_data()
         task = Task(normalize=False)
@@ -321,6 +321,8 @@ class CropHarvestMultiClassValidation(CropHarvestEval):
 
         name_suffix = f"_{n_per_class}" if n_per_class is not None else ""
         dw_suffix = "_no_dynamic_world" if ignore_dynamic_world else ""
+        assert len(seeds) == 1
+        seed = seeds[0]
         self.name = f"CropHarvest_multiclass_global{name_suffix}{dw_suffix}_{seed}"
         self.seed = seed
 

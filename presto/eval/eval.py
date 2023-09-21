@@ -37,8 +37,9 @@ class EvalTask(ABC):
     regression: bool
     multilabel: bool
 
-    def __init__(self, seed: int = DEFAULT_SEED):
-        self.seed = seed
+    def __init__(self, seeds: List[int] = [DEFAULT_SEED]):
+        assert len(seeds) == 1
+        self.seed = seeds[0]
         self.name = f"{self.name}_{self.seed}"
 
     def _construct_finetuning_model(self, pretrained_model: Seq2Seq) -> FineTuningModel:

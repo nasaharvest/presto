@@ -40,9 +40,9 @@ class AlgaeBloomsEval(EvalTask):
     multilabel = False
     num_outputs = 1
 
-    def __init__(self, seed: int = DEFAULT_SEED) -> None:
+    def __init__(self, seeds: List[int] = [DEFAULT_SEED]) -> None:
         self.labels = self.load_labels()
-        super().__init__(seed)
+        super().__init__(seeds)
 
     @staticmethod
     def load_labels():

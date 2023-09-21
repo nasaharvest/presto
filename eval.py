@@ -52,6 +52,13 @@ argparser.add_argument(
     help="Output is stored in <data_dir>/output. "
     "Leave empty to use the directory you are running this file from.",
 )
+argparser.add_argument(
+    "--eval_seeds",
+    type=int,
+    default=[0, DEFAULT_SEED, 48],
+    nargs="+",
+    help="seeds to use for eval tasks",
+)
 argparser.add_argument("--fully_supervised", dest="fully_supervised", action="store_true")
 argparser.add_argument("--wandb", dest="wandb", action="store_true")
 argparser.set_defaults(wandb=False)
@@ -61,6 +68,7 @@ args = argparser.parse_args().__dict__
 path_to_state_dict = args["path_to_state_dict"]
 path_to_config = args["path_to_config"]
 fully_supervised = args["fully_supervised"]
+eval_seeds = args["eval_seeds"]
 wandb_enabled = args["wandb"]
 data_dir = args["data_dir"]
 if data_dir != "":
@@ -96,21 +104,11 @@ model.to(device)
 
 logger.info("Loading evaluation tasks")
 eval_task_list: List[EvalTask] = [
-    CropHarvestEval("Kenya", ignore_dynamic_world=True),
-    CropHarvestEval("Togo", ignore_dynamic_world=True),
-    CropHarvestEval("Brazil", ignore_dynamic_world=True),
-    CropHarvestEval("Kenya", ignore_dynamic_world=True, seed=0),
-    CropHarvestEval("Togo", ignore_dynamic_world=True, seed=0),
-    CropHarvestEval("Brazil", ignore_dynamic_world=True, seed=0),
-    CropHarvestEval("Kenya", ignore_dynamic_world=True, seed=84),
-    CropHarvestEval("Togo", ignore_dynamic_world=True, seed=84),
-    CropHarvestEval("Brazil", ignore_dynamic_world=True, seed=84),
-    FuelMoistureEval(),
-    AlgaeBloomsEval(),
-    FuelMoistureEval(seed=0),
-    AlgaeBloomsEval(seed=0),
-    FuelMoistureEval(seed=84),
-    AlgaeBloomsEval(seed=84),
+    *[CropHarvestEval("Kenya", ignore_dynamic_world=True, seeds=[s]) for s in eval_seeds],
+    *[CropHarvestEval("Togo", ignore_dynamic_world=True, seeds=[s]) for s in eval_seeds],
+    *[CropHarvestEval("Brazil", ignore_dynamic_world=True, seeds=[s]) for s in eval_seeds],
+    *[FuelMoistureEval(seeds=[s]) for s in eval_seeds],
+    *[AlgaeBloomsEval(seeds=[s]) for s in eval_seeds],
     # no seeds for EuroSat, which we evaluate using
     # a KNN classifier
     EuroSatEval(rgb=True, input_patch_size=32),
@@ -125,35 +123,29 @@ eval_task_list: List[EvalTask] = [
     EuroSatEval(rgb=False, input_patch_size=4),
     EuroSatEval(rgb=False, input_patch_size=2),
     EuroSatEval(rgb=False, input_patch_size=1),
-    TreeSatEval("S1", input_patch_size=1),
-    TreeSatEval("S2", input_patch_size=1),
-    TreeSatEval("S1", input_patch_size=2),
-    TreeSatEval("S2", input_patch_size=2),
-    TreeSatEval("S1", input_patch_size=3),
-    TreeSatEval("S2", input_patch_size=3),
-    TreeSatEval("S1", input_patch_size=6),
-    TreeSatEval("S2", input_patch_size=6),
-    CropHarvestEval("Kenya"),
-    CropHarvestEval("Togo"),
-    CropHarvestEval("Brazil"),
-    CropHarvestEval("Kenya", seed=0),
-    CropHarvestEval("Togo", seed=0),
-    CropHarvestEval("Brazil", seed=0),
-    CropHarvestEval("Kenya", seed=84),
-    CropHarvestEval("Togo", seed=84),
-    CropHarvestEval("Brazil", seed=84),
+    TreeSatEval("S1", input_patch_size=1, seeds=eval_seeds),
+    TreeSatEval("S2", input_patch_size=1, seeds=eval_seeds),
+    TreeSatEval("S1", input_patch_size=2, seeds=eval_seeds),
+    TreeSatEval("S2", input_patch_size=2, seeds=eval_seeds),
+    TreeSatEval("S1", input_patch_size=3, seeds=eval_seeds),
+    TreeSatEval("S2", input_patch_size=3, seeds=eval_seeds),
+    TreeSatEval("S1", input_patch_size=6, seeds=eval_seeds),
+    TreeSatEval("S2", input_patch_size=6, seeds=eval_seeds),
+    *[CropHarvestEval("Kenya", seeds=[s]) for s in eval_seeds],
+    *[CropHarvestEval("Togo", seeds=[s]) for s in eval_seeds],
+    *[CropHarvestEval("Brazil", seeds=[s]) for s in eval_seeds],
 ]
 # add CropHarvest over time
-for seed in [DEFAULT_SEED, 0, 84]:
+for seed in eval_seeds:
     eval_task_list.extend(
         [
-            CropHarvestEval("Togo", ignore_dynamic_world=True, num_timesteps=x, seed=seed)
+            CropHarvestEval("Togo", ignore_dynamic_world=True, num_timesteps=x, seeds=[seed])
             for x in range(1, 12)
         ]
     )
     eval_task_list.extend(
         [
-            CropHarvestEval("Kenya", ignore_dynamic_world=True, num_timesteps=x, seed=seed)
+            CropHarvestEval("Kenya", ignore_dynamic_world=True, num_timesteps=x, seeds=[seed])
             for x in range(1, 12)
         ]
     )
@@ -165,6 +157,7 @@ if wandb_enabled:
         "decoder": model.decoder.__class__,
         "device": device,
         "model_parameters": "random" if fully_supervised else path_to_state_dict,
+        "logging_dir": logging_dir,
         **args,
         **model_kwargs,
     }

@@ -24,7 +24,13 @@ argparser.add_argument("--model_name", type=str, default="")
 argparser.add_argument("--k", type=int, default=8192)
 argparser.add_argument("--kernel_size", type=int, default=3)
 argparser.add_argument("--wandb", dest="wandb", action="store_true")
-argparser.add_argument("--wandb_plots", type=int, default=3)
+argparser.add_argument(
+    "--eval_seeds",
+    type=int,
+    default=[0, DEFAULT_SEED, 48],
+    nargs="+",
+    help="seeds to use for eval tasks",
+)
 
 argparser.add_argument(
     "--train_url",
@@ -40,6 +46,7 @@ model_name = args["model_name"]
 k = args["k"]
 kernel_size = args["kernel_size"]
 wandb_enabled: bool = args["wandb"]
+eval_seeds = args["eval_seeds"]
 
 train_url: str = args["train_url"]
 
@@ -94,11 +101,11 @@ for seed in [0, DEFAULT_SEED, 84]:
 
     logger.info("Loading evaluation tasks")
     eval_task_list: List[EvalTask] = [
-        FuelMoistureEval(seed=seed),
-        AlgaeBloomsEval(seed=seed),
-        CropHarvestEval("Kenya", seed=seed),
-        CropHarvestEval("Togo", seed=seed),
-        CropHarvestEval("Brazil", seed=seed),
+        *[FuelMoistureEval(seeds=[s]) for s in eval_seeds],
+        *[AlgaeBloomsEval(seeds=[s]) for s in eval_seeds],
+        *[CropHarvestEval("Kenya", seeds=[s]) for s in eval_seeds],
+        *[CropHarvestEval("Togo", seeds=[s]) for s in eval_seeds],
+        *[CropHarvestEval("Brazil", seeds=[s]) for s in eval_seeds],
     ]
 
     for eval_task in tqdm(eval_task_list, desc="Full Evaluation"):
