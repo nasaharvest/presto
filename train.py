@@ -13,7 +13,7 @@ from torch import optim
 from tqdm import tqdm
 
 from presto import Presto
-from presto.dataops import BANDS_GROUPS_IDX, MASK_STRATEGIES, MaskParams, plot_masked
+from presto.dataops import MASK_STRATEGIES, MaskParams, plot_masked
 from presto.dataops.dataset import (
     TAR_BUCKET,
     S1_S2_ERA5_SRTM_DynamicWorldMonthly_2020_2021,
@@ -172,7 +172,7 @@ if cropharvest_per_n_validations != 0:
 
 # ------------ Model -----------------------------------------
 print("Setting up model")
-model = Presto.construct(band_groups=BANDS_GROUPS_IDX, **model_kwargs)
+model = Presto.construct(**model_kwargs)
 model.to(device)
 
 # ------------ Model hyperparameters -------------------------------------

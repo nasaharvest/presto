@@ -97,9 +97,9 @@ BANDS_GROUPS_IDX: OrderedDictType[str, List[int]] = OrderedDict(
     {
         "S1": [NORMED_BANDS.index(b) for b in S1_BANDS],
         "S2_RGB": [NORMED_BANDS.index(b) for b in ["B2", "B3", "B4"]],
+        "S2_Red_Edge": [NORMED_BANDS.index(b) for b in ["B5", "B6", "B7"]],
         "S2_NIR_10m": [NORMED_BANDS.index(b) for b in ["B8"]],
         "S2_NIR_20m": [NORMED_BANDS.index(b) for b in ["B8A"]],
-        "S2_Red_Edge": [NORMED_BANDS.index(b) for b in ["B5", "B6", "B7"]],
         "S2_SWIR": [NORMED_BANDS.index(b) for b in ["B11", "B12"]],  # Include B10?
         "ERA5": [NORMED_BANDS.index(b) for b in ERA5_BANDS],
         "SRTM": [NORMED_BANDS.index(b) for b in SRTM_BANDS],

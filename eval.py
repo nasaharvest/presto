@@ -10,7 +10,6 @@ from typing import List
 import torch
 from tqdm import tqdm
 
-from presto.dataops import BANDS_GROUPS_IDX
 from presto.eval import (
     AlgaeBloomsEval,
     CropHarvestEval,
@@ -37,7 +36,7 @@ fully_supervised = args["fully_supervised"]
 if path_to_config == "":
     path_to_config = config_dir / "default.json"
 model_kwargs = json.load(Path(path_to_config).open("r"))
-model = Presto.construct(band_groups=BANDS_GROUPS_IDX, **model_kwargs)
+model = Presto.construct(**model_kwargs)
 
 if not fully_supervised:
     if path_to_state_dict == "":
