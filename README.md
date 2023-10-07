@@ -36,7 +36,7 @@ encoder_only = encoder_decoder.encoder
 # to add a linear transformation to the encoder's output for finetuning
 finetuning_model = encoder_decoder.construct_finetuning_model(num_outputs=1, regression=True)
 ```
-The default arguments to `construct` are the same as the default parameters described in [`default.json`](presto/config/default.json).
+The default arguments to `construct` are the same as the default parameters described in [`default.json`](config/default.json).
 
 Presto expects the following values as input, and returns the following outputs:
 ```python
