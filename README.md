@@ -174,7 +174,7 @@ If you find this code useful, please cite the following paper:
 ```
 @misc{tseng2023lightweight,
       title={Lightweight, Pre-trained Transformers for Remote Sensing Timeseries},
-      author={Gabriel Tseng and Ivan Zvonkov and Mirali Purohit and David Rolnick and Hannah Kerner},
+      author={Gabriel Tseng and Ruben Cartuyvels and Ivan Zvonkov and Mirali Purohit and David Rolnick and Hannah Kerner},
       year={2023},
       eprint={2304.14065},
       archivePrefix={arXiv},
