@@ -65,6 +65,7 @@ def construct_single_presto_input(
     mask = mask[:, keep_indices]
 
     if normalize:
+        # normalize includes x = x[:, keep_indices]
         x = S1_S2_ERA5_SRTM.normalize(x)
         if s2_bands is not None:
             if ("B8" in s2_bands) and ("B4" in s2_bands):
