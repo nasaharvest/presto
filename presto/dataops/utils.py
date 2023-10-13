@@ -6,6 +6,7 @@ from .pipelines.dynamicworld import DynamicWorld2020_2021
 from .pipelines.s1_s2_era5_srtm import (
     BANDS,
     ERA5_BANDS,
+    NORMED_BANDS,
     REMOVED_BANDS,
     S1_BANDS,
     S1_S2_ERA5_SRTM,
@@ -60,8 +61,15 @@ def construct_single_presto_input(
     if dynamic_world is None:
         dynamic_world = torch.ones(num_timesteps) * (DynamicWorld2020_2021.class_amount)
 
+    keep_indices = [idx for idx, val in enumerate(BANDS) if val != "B9"]
+    mask = mask[:, keep_indices]
+
     if normalize:
-        keep_indices = [idx for idx, val in enumerate(BANDS) if val != "B9"]
-        mask = mask[:, keep_indices]
+        # normalize includes x = x[:, keep_indices]
         x = S1_S2_ERA5_SRTM.normalize(x)
+        if s2_bands is not None:
+            if ("B8" in s2_bands) and ("B4" in s2_bands):
+                mask[:, NORMED_BANDS.index("NDVI")] = 0
+    else:
+        x = x[:, keep_indices]
     return x, mask, dynamic_world
