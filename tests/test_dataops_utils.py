@@ -9,9 +9,9 @@ from presto.dataops.pipelines.s1_s2_era5_srtm import NORMED_BANDS
 
 class TestDatopsUtils(TestCase):
     def test_construct_single_presto_input(self):
-        input_bands = ["B2", "B3", "B4"]
+        input_bands = ["B2", "B3", "B4", "B8"]
         x, mask, dw = construct_single_presto_input(
-            s2=torch.ones(2, 3), s2_bands=["B2", "B3", "B4"], normalize=False
+            s2=torch.ones(2, 4), s2_bands=input_bands, normalize=False
         )
         self.assertTrue(torch.equal(dw, torch.ones_like(dw) * DynamicWorld2020_2021.class_amount))
         self.assertEqual(len(dw), x.shape[0])
