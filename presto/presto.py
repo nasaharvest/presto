@@ -1,5 +1,6 @@
 import math
 from copy import deepcopy
+from pathlib import Path
 from typing import Optional, Sized, Tuple, Union, cast
 
 import numpy as np
@@ -785,7 +786,7 @@ class Presto(Seq2Seq):
         return model
 
     @classmethod
-    def load_pretrained(cls):
+    def load_pretrained(cls, model_path: Union[str, Path] = default_model_path):
         model = cls.construct()
-        model.load_state_dict(torch.load(default_model_path, map_location=device))
+        model.load_state_dict(torch.load(model_path, map_location=device))
         return model
