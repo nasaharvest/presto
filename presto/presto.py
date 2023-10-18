@@ -634,7 +634,7 @@ class Decoder(nn.Module):
         num_channel_groups = len(self.band_group_to_idx) - 1
         num_timesteps = int((x.shape[1] - 1) / num_channel_groups)
         srtm_index = self.band_group_to_idx["SRTM"] * num_timesteps
-        srtm_token = x[:, srtm_index: srtm_index + 1, :]
+        srtm_token = x[:, srtm_index : srtm_index + 1, :]
 
         mask = torch.full((x.shape[1],), True, device=x.device)
         mask[torch.tensor(srtm_index)] = False
