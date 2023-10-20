@@ -47,7 +47,7 @@ globally_pooled_tokens = encoder(x, dynamic_world, latlons, mask, month, eval_ta
 predictions = finetuning_model(x, dynamic_world, latlons, mask, month)
 ```
 - `x`: *torch.Tensor* of shape `[batch_size, num_timesteps, bands]` where `bands` is described by [`NORMED_BANDS`](presto/dataops/pipelines/s1_s2_era5_srtm.py).
-- `dynamic_world`: *torch.Tensor* of shape `[batch_size, num_timesteps]`. If no Dynamic World classes are available, this tensor should be filled with the value [`DynamicWorld2020_2021.class_amount + 1`](presto/dataops/pipelines/dynamicworld.py) (i.e. `10`), in which case it is ignored.
+- `dynamic_world`: *torch.Tensor* of shape `[batch_size, num_timesteps]`. If no Dynamic World classes are available, this tensor should be filled with the value [`DynamicWorld2020_2021.class_amount`](presto/dataops/pipelines/dynamicworld.py) (i.e. `9`), in which case it is ignored.
 - `latlons`: *torch.Tensor* of shape `[batch_size, 2]` describing the latitude and longitude of each input instance.
 - `mask`: An optional *torch.Tensor* of shape `[batch_size, num_timesteps, bands]`. `mask[i, j, k] == 1` means `x[i, j, k]` is considered masked. If the mask is `None`, no values in `x` are ignored.
 - `month`: An *int* or *torch.Tensor* describing the first month of the instances being passed. If an *int*, all instances in the batch are assumed to have the same starting month.
