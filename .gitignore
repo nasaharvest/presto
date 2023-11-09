@@ -16,3 +16,4 @@ gha-creds-*.json
 *.png
 .idea
 presto.egg-info
+.run

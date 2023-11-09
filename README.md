@@ -66,7 +66,7 @@ x, mask, dynamic_world = presto.construct_single_presto_input(
 )
 ```
 Here, `x` will contain only the (normalized) RGB values in the correct indices, and `mask` will communicate to Presto to ignore every other input.
-Similarly, `dynamic_world` will contain only `DynamicWorld2020_2021.class_amount + 1`, so Presto will ignore it.
+Similarly, `dynamic_world` will contain only `DynamicWorld2020_2021.class_amount`, so Presto will ignore it.
 
 ### Training
 
