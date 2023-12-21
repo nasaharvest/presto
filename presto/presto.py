@@ -296,14 +296,14 @@ class Encoder(nn.Module):
 
         self.eo_patch_embed = nn.ModuleDict(
             {
-                group_name: nn.Linear(len(group), embedding_size)
+                group_name: nn.Linear(len(group), embedding_size).to(device)
                 for group_name, group in self.band_groups.items()
             }
         )
         self.dw_embed = nn.Embedding(
             num_embeddings=DynamicWorld2020_2021.class_amount + 1, embedding_dim=embedding_size
-        )
-        self.latlon_embed = nn.Linear(3, embedding_size)
+        ).to(device)
+        self.latlon_embed = nn.Linear(3, embedding_size).to(device)
 
         self.blocks = nn.ModuleList(
             [
@@ -313,11 +313,11 @@ class Encoder(nn.Module):
                     mlp_ratio,
                     qkv_bias=True,
                     norm_layer=nn.LayerNorm,
-                )
+                ).to(device)
                 for _ in range(depth)
             ]
         )
-        self.norm = nn.LayerNorm(embedding_size)
+        self.norm = nn.LayerNorm(embedding_size).to(device)
 
         # the positional + monthly + channel embedding
         self.max_sequence_length = max_sequence_length
@@ -331,12 +331,11 @@ class Encoder(nn.Module):
         self.month_embed = nn.Embedding.from_pretrained(month_tab, freeze=True)
         self.channel_embed = nn.Embedding(
             num_embeddings=len(self.band_groups) + 1, embedding_dim=channel_embedding_size
-        )
+        ).to(device)
 
         self.initialize_weights()
 
     def initialize_weights(self):
-
         pos_embed = get_sinusoid_encoding_table(self.pos_embed.shape[1], self.pos_embed.shape[-1])
         self.pos_embed.data.copy_(pos_embed)
 
@@ -397,7 +396,6 @@ class Encoder(nn.Module):
         month: Union[torch.Tensor, int] = 0,
         eval_task: bool = True,
     ):
-
         if mask is None:
             mask = torch.zeros_like(x, device=x.device).float()
 
@@ -405,7 +403,7 @@ class Encoder(nn.Module):
         month_embedding = self.month_embed(months)
         positional_embedding = repeat(
             self.pos_embed[:, : x.shape[1], :], "b t d -> (repeat b) t d", repeat=x.shape[0]
-        )
+        ).to(device)
 
         # we assume the number of masked patches is the same
         # for all items in the batch. Otherwise things become a headache
@@ -544,7 +542,6 @@ class Decoder(nn.Module):
         self.initialize_weights()
 
     def initialize_weights(self):
-
         pos_embed = get_sinusoid_encoding_table(self.pos_embed.shape[1], self.pos_embed.shape[-1])
         self.pos_embed.data.copy_(pos_embed)
 
@@ -666,7 +663,6 @@ class Decoder(nn.Module):
         return torch.cat(eo_output, dim=-1), cast(torch.Tensor, dw_output)
 
     def forward(self, x, kept_indices, removed_indices, month):
-
         x = self.decoder_embed(x)
         x = self.add_masked_tokens(x, kept_indices, removed_indices)
         x = self.add_embeddings(x, month)
@@ -699,7 +695,6 @@ class PrestoFineTuningModel(FineTuningModel):
         mask: Optional[torch.Tensor] = None,
         month: Union[torch.Tensor, int] = 0,
     ) -> torch.Tensor:
-
         return self.head(
             self.encoder(
                 x=x,
