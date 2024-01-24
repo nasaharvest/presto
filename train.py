@@ -103,13 +103,6 @@ argparser.add_argument(
     nargs="+",
     help="`all` will use all available masking strategies (including single bands)",
 )
-argparser.add_argument(
-    "--eval_seeds",
-    type=int,
-    default=[0, DEFAULT_SEED, 48],
-    nargs="+",
-    help="seeds to use for eval tasks",
-)
 argparser.add_argument("--mask_ratio", type=float, default=0.75)
 argparser.add_argument("--seed", type=int, default=DEFAULT_SEED)
 argparser.add_argument("--wandb", dest="wandb", action="store_true")
@@ -174,7 +167,6 @@ min_learning_rate = args["min_learning_rate"]
 warmup_epochs = args["warmup_epochs"]
 weight_decay = args["weight_decay"]
 batch_size = args["batch_size"]
-eval_seeds = args["eval_seeds"]
 
 mask_strategies: Tuple[str, ...] = tuple(args["mask_strategies"])
 if (len(mask_strategies) == 1) and (mask_strategies[0] == "all"):
@@ -247,7 +239,6 @@ training_config = {
     "eo_loss": mse.loss.__class__.__name__,
     "dynamic_world_loss": ce.loss.__class__.__name__,
     "device": device,
-    "logging_dir": logging_dir,
     **args,
     **model_kwargs,
 }
@@ -484,52 +475,35 @@ if not skip_finetuning:
     model.load_state_dict(best_model)
 
     logger.info("Loading evaluation tasks")
+    seeds = [0, DEFAULT_SEED, 84]
     eval_task_list: List[EvalTask] = [
-        *[CropHarvestEval("Kenya", ignore_dynamic_world=True, seeds=[s]) for s in eval_seeds],
-        *[CropHarvestEval("Togo", ignore_dynamic_world=True, seeds=[s]) for s in eval_seeds],
-        *[CropHarvestEval("Brazil", ignore_dynamic_world=True, seeds=[s]) for s in eval_seeds],
-        *[FuelMoistureEval(seeds=[s]) for s in eval_seeds],
-        *[AlgaeBloomsEval(seeds=[s]) for s in eval_seeds],
-        # no seeds for EuroSat, which we evaluate using
-        # a KNN classifier
-        EuroSatEval(rgb=True, input_patch_size=32),
-        EuroSatEval(rgb=True, input_patch_size=16),
-        EuroSatEval(rgb=True, input_patch_size=8),
-        EuroSatEval(rgb=True, input_patch_size=4),
-        EuroSatEval(rgb=True, input_patch_size=2),
-        EuroSatEval(rgb=True, input_patch_size=1),
-        EuroSatEval(rgb=False, input_patch_size=32),
-        EuroSatEval(rgb=False, input_patch_size=16),
-        EuroSatEval(rgb=False, input_patch_size=8),
-        EuroSatEval(rgb=False, input_patch_size=4),
-        EuroSatEval(rgb=False, input_patch_size=2),
-        EuroSatEval(rgb=False, input_patch_size=1),
-        TreeSatEval("S1", input_patch_size=1, seeds=eval_seeds),
-        TreeSatEval("S2", input_patch_size=1, seeds=eval_seeds),
-        TreeSatEval("S1", input_patch_size=2, seeds=eval_seeds),
-        TreeSatEval("S2", input_patch_size=2, seeds=eval_seeds),
-        TreeSatEval("S1", input_patch_size=3, seeds=eval_seeds),
-        TreeSatEval("S2", input_patch_size=3, seeds=eval_seeds),
-        TreeSatEval("S1", input_patch_size=6, seeds=eval_seeds),
-        TreeSatEval("S2", input_patch_size=6, seeds=eval_seeds),
-        *[CropHarvestEval("Kenya", seeds=[s]) for s in eval_seeds],
-        *[CropHarvestEval("Togo", seeds=[s]) for s in eval_seeds],
-        *[CropHarvestEval("Brazil", seeds=[s]) for s in eval_seeds],
+        *[
+            CropHarvestEval(country=country, ignore_dynamic_world=idw, seed=seed)
+            for country in ["Kenya", "Togo", "Brazil"]
+            for idw in [True, False]
+            for seed in seeds
+        ],
+        *[FuelMoistureEval(seed=seed) for seed in seeds],
+        *[AlgaeBloomsEval(seed=seed) for seed in seeds],
+        *[
+            EuroSatEval(rgb=rgb, input_patch_size=ps, seed=seed)
+            for rgb in [True, False]
+            for ps in [1, 2, 4, 8, 16, 32, 64]
+            for seed in seeds
+        ],
+        *[TreeSatEval(subset=subset, seed=seed) for subset in ["S1", "S2"] for seed in seeds],
+        *[
+            CropHarvestEval("Togo", ignore_dynamic_world=True, num_timesteps=x, seed=seed)
+            for x in range(1, 12)
+            for seed in seeds
+        ],
+        *[
+            CropHarvestEval("Kenya", ignore_dynamic_world=True, num_timesteps=x, seed=seed)
+            for x in range(1, 12)
+            for seed in seeds
+        ],
     ]
-    # add CropHarvest over time
-    for seed in eval_seeds:
-        eval_task_list.extend(
-            [
-                CropHarvestEval("Togo", ignore_dynamic_world=True, num_timesteps=x, seeds=[seed])
-                for x in range(1, 12)
-            ]
-        )
-        eval_task_list.extend(
-            [
-                CropHarvestEval("Kenya", ignore_dynamic_world=True, num_timesteps=x, seeds=[seed])
-                for x in range(1, 12)
-            ]
-        )
+
     result_dict = {}
     for eval_task in tqdm(eval_task_list, desc="Full Evaluation"):
         model_modes = ["finetune", "Regression", "Random Forest"]

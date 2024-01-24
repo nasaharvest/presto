@@ -1,5 +1,6 @@
 import logging
 from abc import ABC
+from copy import deepcopy
 from dataclasses import astuple, dataclass
 from typing import Callable, Dict, List, Optional, Sequence, Union, cast
 
@@ -16,6 +17,7 @@ from tqdm import tqdm
 
 from ..dataops import S1_S2_ERA5_SRTM, DynamicWorld2020_2021
 from ..model import FineTuningModel, Seq2Seq
+from ..presto import PrestoFinetuningWithAggregates
 from ..utils import DEFAULT_SEED, device
 from .knn import KNNat5, KNNat20, KNNat100
 
@@ -25,10 +27,11 @@ logger = logging.getLogger("__main__")
 @dataclass
 class Hyperparams:
     lr: float = 3e-4
-    max_epochs: int = 20
+    max_epochs: int = 100
     batch_size: int = 4096
     patience: int = 3
     num_workers: int = 2
+    weight_decay: float = 0.05
 
 
 class EvalTask(ABC):
@@ -37,9 +40,8 @@ class EvalTask(ABC):
     regression: bool
     multilabel: bool
 
-    def __init__(self, seeds: List[int] = [DEFAULT_SEED]):
-        assert len(seeds) == 1
-        self.seed = seeds[0]
+    def __init__(self, seed: int = DEFAULT_SEED):
+        self.seed = seed
         self.name = f"{self.name}_{self.seed}"
 
     def _construct_finetuning_model(self, pretrained_model: Seq2Seq) -> FineTuningModel:
@@ -80,7 +82,7 @@ class EvalTask(ABC):
         best_model_dict = None
         epochs_since_improvement = 0
 
-        for _ in tqdm(range(max_epochs), desc="Finetuning"):
+        for _ in (pbar := tqdm(range(max_epochs), desc="Finetuning")):
             model.train()
             epoch_train_loss = 0.0
             for x, dw, latlons, y, month in tqdm(train_dl, desc="Training", leave=False):
@@ -116,14 +118,15 @@ class EvalTask(ABC):
                     all_preds.append(preds)
                     all_y.append(y)
 
-            val_loss.append(val_loss_fn(torch.cat(all_preds).cpu(), torch.cat(all_y).cpu()))
+            val_loss.append(val_loss_fn(torch.cat(all_preds), torch.cat(all_y)))
+            pbar.set_description(f"Train metric: {train_loss[-1]}, Val metric: {val_loss[-1]}")
             if best_loss is None:
                 best_loss = val_loss[-1]
-                best_model_dict = model.state_dict()
+                best_model_dict = deepcopy(model.state_dict())
             else:
                 if val_loss[-1] < best_loss:
                     best_loss = val_loss[-1]
-                    best_model_dict = model.state_dict()
+                    best_model_dict = deepcopy(model.state_dict())
                     epochs_since_improvement = 0
                 else:
                     epochs_since_improvement += 1
@@ -224,82 +227,29 @@ class EvalTask(ABC):
 
 
 class EvalTaskWithAggregatedOutputs(EvalTask, ABC):
-
-    # used for a histogram aggregation
-    lower = None
-    upper = None
-
     def __init__(
         self,
         aggregates: List[str],
         outputs_per_image: int,
-        num_histogram_bins: Optional[int] = None,
-        histogram_lower: Optional[int] = None,
-        histogram_upper: Optional[int] = None,
-        seeds: List[int] = [DEFAULT_SEED],
+        seed: int = DEFAULT_SEED,
     ):
         for aggregate in aggregates:
-            assert aggregate in ("mean", "quantiles", "histogram")
+            assert aggregate in ("mean", "quantiles")
         self.aggregates = aggregates
+        self.sklearn_aggregates = aggregates
         self.outputs_per_image = outputs_per_image
-        if "histogram" in self.aggregates:
-            assert histogram_lower is not None
-            self.lower = histogram_lower
-            assert histogram_upper is not None
-            self.upper = histogram_upper
-            assert num_histogram_bins is not None
-            self.num_histogram_bins = num_histogram_bins
-        self.seeds = seeds
+        self.seed = seed
+        self.name = f"{self.name}_{self.seed}"
 
-    def _construct_finetuning_model(self, pretrained_model: Seq2Seq) -> FineTuningModel:
-        # TODO
-        raise NotImplementedError
-
-    def reshape_for_aggregate(
-        self,
-        encodings: torch.Tensor,
-        aggregate: str,
-    ) -> torch.Tensor:
-
-        encodings_im = rearrange(
-            encodings, "(img p) h_dim -> img p h_dim", p=self.outputs_per_image
-        )
-        if aggregate == "histogram":
-
-            def histo(i, d):
-                return torch.histogram(
-                    encodings_im.cpu()[i, :, d],
-                    bins=self.num_histogram_bins,
-                    range=(self.lower, self.upper),
-                ).hist
-
-            return torch.vstack(
-                [
-                    torch.cat([histo(i, d) for d in range(encodings_im.shape[-1])], dim=-1)
-                    for i in range(encodings_im.shape[0])
-                ]
-            )
-        elif aggregate == "quantiles":
-            return torch.cat(
-                [
-                    torch.quantile(encodings_im, 0.25, dim=1),
-                    torch.mean(encodings_im, dim=1),
-                    torch.quantile(encodings_im, 0.75, dim=1),
-                    # the unbiased (default) estimate divides by (n-1) giving NaN
-                    #   for self.outputs_per_image == 1
-                    torch.std(encodings_im, dim=1, correction=int(encodings_im.shape[1] > 1)),
-                    torch.quantile(encodings_im, q=0.5, dim=1),  # median
-                ],
-                dim=-1,
-            )
-        else:
-            return torch.cat(
-                [
-                    torch.mean(encodings_im, dim=1),
-                    torch.std(encodings_im, dim=1, correction=int(encodings_im.shape[1] > 1)),
-                ],
-                dim=-1,
-            )
+    def _construct_finetuning_model_with_aggregates(
+        self, pretrained_model: Seq2Seq, aggregate: str
+    ) -> FineTuningModel:
+        return PrestoFinetuningWithAggregates(
+            pretrained_model.encoder,
+            self.num_outputs,
+            self.regression,
+            aggregate,
+        ).to(device)
 
     @torch.no_grad()
     def finetune_sklearn_model(
@@ -319,10 +269,9 @@ class EvalTaskWithAggregatedOutputs(EvalTask, ABC):
                     "KNNat5",
                     "KNNat20",
                     "KNNat100",
-                ]
+                ], f"Unexpected model mode {model_mode}"
         pretrained_model.eval()
-
-        aggregate_lists: Dict[str, List] = {aggregate: [] for aggregate in self.aggregates}
+        aggregate_lists: Dict[str, List] = {aggregate: [] for aggregate in self.sklearn_aggregates}
         y_list = []
         for x, y, dw, latlons, month in tqdm(dl, desc="Computing embeddings"):
             x, dw, latlons, month = [t.to(device) for t in (x, dw, latlons, month)]
@@ -331,9 +280,11 @@ class EvalTaskWithAggregatedOutputs(EvalTask, ABC):
                 encodings = pretrained_model.encoder(
                     x, dynamic_world=dw, mask=batch_mask, latlons=latlons, month=month
                 ).cpu()
-                for aggregate in self.aggregates:
+                for aggregate in self.sklearn_aggregates:
                     assert not torch.isnan(encodings).any()
-                    reshaped_encodings = self.reshape_for_aggregate(encodings, aggregate)
+                    reshaped_encodings = PrestoFinetuningWithAggregates.reshape_for_aggregate(
+                        encodings, aggregate, self.outputs_per_image
+                    )
                     assert not torch.isnan(reshaped_encodings).any()
                     aggregate_lists[aggregate].append(reshaped_encodings.cpu().numpy())
                 y_list.append(
@@ -351,33 +302,48 @@ class EvalTaskWithAggregatedOutputs(EvalTask, ABC):
         for aggregate, aggregations in aggregate_lists.items():
             aggregate_lists[aggregate] = np.concatenate(aggregations, axis=0)
 
-        fit_models: Dict[str, List] = {aggregate: [] for aggregate in self.aggregates}
-        for seed in self.seeds:
-            model_dict = {
-                False: {
-                    "Regression": self._construct_model(
-                        LogisticRegression(max_iter=1000, random_state=seed)
-                    ),
-                    "Random Forest": self._construct_model(
-                        RandomForestClassifier(random_state=seed)
-                    ),
-                    "KNNat5": KNNat5(),
-                    "KNNat20": KNNat20(),
-                    "KNNat100": KNNat100(),
-                },
-                True: {
-                    "Regression": LinearRegression(),
-                    "Random Forest": RandomForestRegressor(random_state=seed),
-                },
-            }
+        fit_models: Dict[str, List] = {aggregate: [] for aggregate in self.sklearn_aggregates}
+        model_dict = {
+            False: {
+                "Regression": self._construct_model(
+                    LogisticRegression(max_iter=1000, random_state=self.seed)
+                ),
+                "Random Forest": self._construct_model(
+                    RandomForestClassifier(random_state=self.seed)
+                ),
+                "KNNat5": KNNat5(),
+                "KNNat20": KNNat20(),
+                "KNNat100": KNNat100(),
+            },
+            True: {
+                "Regression": LinearRegression(),
+                "Random Forest": RandomForestRegressor(random_state=self.seed),
+            },
+        }
 
-            for aggregate in tqdm(self.aggregates, desc="Fitting sklearn models"):
-                encodings_im = aggregate_lists[aggregate]
-                for model in tqdm(models, desc="Fitting sklearn models"):
-                    fit_models[aggregate].append(
-                        clone(model_dict[self.regression][model]).fit(encodings_im, y_per_im)
-                    )
+        for aggregate in tqdm(self.sklearn_aggregates, desc="Fitting sklearn models"):
+            encodings_im = aggregate_lists[aggregate]
+            for model in tqdm(models, desc="Fitting sklearn models"):
+                fit_models[aggregate].append(
+                    clone(model_dict[self.regression][model]).fit(encodings_im, y_per_im)
+                )
         return fit_models
+
+    def evaluate_for_sklearn(
+        self,
+        finetuned_model: Dict,
+        pretrained_model=None,
+        mask: Optional[np.ndarray] = None,
+    ) -> Dict:
+        raise NotImplementedError
+
+    @torch.no_grad()
+    def evaluate_for_finetuned_model(
+        self,
+        finetuned_model: FineTuningModel,
+        mask: Optional[np.ndarray] = None,
+    ) -> Dict:
+        raise NotImplementedError
 
 
 class EvalDatasetWithPatches(Dataset, ABC):
@@ -428,13 +394,14 @@ class EvalDatasetWithPatches(Dataset, ABC):
         # flatten to array of pixels, normalize, unflatten to patches
         arrays = rearrange(
             arrays,
-            "c (n1 p1) (n2 p2) -> (n1 n2) c p1 p2",
+            # ... is an optional dimension for CroptypeFrance timeseries
+            "... c (n1 p1) (n2 p2) -> (n1 n2) ... c p1 p2",
             n1=self.num_patches_per_dim,
             n2=self.num_patches_per_dim,
             p1=self.input_patch_size,
             p2=self.input_patch_size,
         )
-        return reduce(arrays, "b c h w -> b c", "mean")
+        return reduce(arrays, "b ... c h w -> b ... c", "mean")
 
     @staticmethod
     def collate_fn(data):
@@ -445,8 +412,21 @@ class EvalDatasetWithPatches(Dataset, ABC):
             rearrange(labels, "b bp ... -> (b bp) ..."),
             rearrange(dw, "b bp t -> (b bp) t"),
             rearrange(latlons, "b bp d -> (b bp) d"),
-            rearrange(month, "b bp -> (b bp)"),
+            # ... = optional dimension for sequences with timesteps > 1
+            rearrange(month, "b bp ... -> (b bp) ..."),
         )
+
+    @staticmethod
+    def finetuning_collate_fn(data):
+        # NOTE: the finetuning function expects data in
+        # a different order than the sklearn function.
+        # this is confusing and should be fixed
+        x, labels, dw, latlons, month = default_collate(data)
+        if len(labels.shape) > 2:
+            # RuntimeError: Expected floating point type for target with
+            # class probabilities
+            labels = labels.float()
+        return (x, dw, latlons, labels[:, 0], month)
 
     def __len__(self):
         return len(self.images)

@@ -1,22 +1,13 @@
 from unittest import TestCase
 
 import numpy as np
-import torch
 
-from presto.dataops import NUM_ORG_BANDS, NUM_TIMESTEPS
-from presto.dataops.masking import (
-    BANDS_GROUPS_IDX,
-    MASK_STRATEGIES,
-    MaskParams,
-    make_mask,
-)
-from presto.dataops.pipelines.s1_s2_era5_srtm import S1_S2_ERA5_SRTM
-from presto.presto import Presto
+from presto.dataops.masking import BANDS_GROUPS_IDX, NUM_TIMESTEPS, make_mask
 
 TEST_MASK_RATIOS = [x / 100 for x in range(5, 100, 5)]
 
 
-class TestMasking(TestCase):
+class TestS1S2ERA5SRTM(TestCase):
     def test_make_mask_group_bands(self):
         for mask_ratio in TEST_MASK_RATIOS:
             eo_mask, dw_mask = make_mask(strategy="group_bands", mask_ratio=mask_ratio)
@@ -103,28 +94,3 @@ class TestMasking(TestCase):
             self.assertTrue(
                 num_masked_timesteps == int(expected_masked_tokens / len(BANDS_GROUPS_IDX))
             )
-
-    def test_masks_work_with_different_strategies(self):
-        batch_size = 10
-        input_eo = S1_S2_ERA5_SRTM.normalize(np.zeros((NUM_TIMESTEPS, NUM_ORG_BANDS)))
-        dynamic_world = np.ones((NUM_TIMESTEPS))
-
-        eo_mask_list, dw_list, eo_list = [], [], []
-        masker = MaskParams(MASK_STRATEGIES)
-        for _ in range(batch_size):
-            mask, _, x, _, x_dw, _, _ = masker.mask_data(input_eo.copy(), dynamic_world.copy())
-            eo_mask_list.append(torch.from_numpy(mask))
-            dw_list.append(torch.from_numpy(x_dw))
-            eo_list.append(torch.from_numpy(x))
-
-        latlons = torch.rand((batch_size, 2))
-        model = Presto.construct()
-        # if the model masking works, then we have correctly masked the right
-        # number of tokens for all the different strategies
-        _ = model(
-            torch.stack(eo_list),
-            dynamic_world=torch.stack(dw_list).long(),
-            latlons=latlons,
-            mask=torch.stack(eo_mask_list),
-            month=1,
-        )

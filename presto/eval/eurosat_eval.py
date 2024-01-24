@@ -1,7 +1,7 @@
 import json
 import urllib.request
 from pathlib import Path
-from typing import Dict, List, Optional, Union, cast
+from typing import Dict, List, Optional, cast
 
 import numpy as np
 import torch
@@ -9,6 +9,8 @@ import xarray
 from einops import repeat
 from pyproj import Transformer
 from sklearn.metrics import accuracy_score, confusion_matrix, f1_score
+from torch import nn
+from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -21,8 +23,13 @@ from ..dataops.pipelines.s1_s2_era5_srtm import (
     S2_BANDS,
 )
 from ..model import FineTuningModel, Mosaiks1d, Seq2Seq
-from ..utils import device
-from .eval import EvalDatasetWithPatches, EvalTaskWithAggregatedOutputs, Hyperparams
+from ..utils import DEFAULT_SEED, device
+from .eval import (
+    EvalDatasetWithPatches,
+    EvalTaskWithAggregatedOutputs,
+    Hyperparams,
+    PrestoFinetuningWithAggregates,
+)
 
 tif_files_dir = "eurosat/EuroSAT_MS"
 
@@ -139,10 +146,8 @@ class EuroSatEval(EvalTaskWithAggregatedOutputs):
         self,
         rgb: bool = False,
         input_patch_size: int = 1,
-        aggregates: List[str] = ["mean", "quantiles", "histogram"],
-        num_histogram_bins: Optional[int] = 10,
-        histogram_lower: Optional[int] = -1,
-        histogram_upper: Optional[int] = 1,
+        aggregates: List[str] = ["mean"],
+        seed: int = DEFAULT_SEED,
     ) -> None:
         self.rgb = rgb
 
@@ -152,12 +157,11 @@ class EuroSatEval(EvalTaskWithAggregatedOutputs):
         assert IMAGE_SIZE % input_patch_size == 0
         self.num_patches_per_dim = int(IMAGE_SIZE / input_patch_size)
         self.num_patches = self.num_patches_per_dim**2
+        self.batch_size = min(self.num_patches * 64, 40920)
 
         self.name = f"EuroSat_{input_patch_size}" if not rgb else f"EuroSat_RGB_{input_patch_size}"
 
-        super().__init__(
-            aggregates, self.num_patches, num_histogram_bins, histogram_lower, histogram_upper
-        )
+        super().__init__(aggregates, self.num_patches, seed)
 
     def update_mask(self, mask: Optional[np.ndarray] = None):
         if not self.rgb:
@@ -181,26 +185,73 @@ class EuroSatEval(EvalTaskWithAggregatedOutputs):
             return np.clip(default_mask, a_min=0, a_max=1)
 
     @torch.no_grad()
-    def evaluate(
+    def evaluate_for_finetuned_model(
         self,
-        finetuned_model: Union[FineTuningModel, Dict],
+        finetuned_model: FineTuningModel,
+        mask: Optional[np.ndarray] = None,
+    ) -> Dict:
+        hparams = Hyperparams(batch_size=self.batch_size)
+        updated_mask = self.update_mask(mask)
+        test_dataset = EuroSatDataset(self.input_patch_size, split="test")
+        test_dl = DataLoader(
+            test_dataset,
+            batch_size=hparams.batch_size // self.num_patches,
+            shuffle=False,
+            num_workers=hparams.num_workers,
+            collate_fn=test_dataset.finetuning_collate_fn,
+        )
+        pred_list, labels = [], []
+        for x, dw, latlons, label, month in tqdm(test_dl, desc="Computing test predictions"):
+            x, dw, latlons, month = [t.to(device) for t in (x, dw, latlons, month)]
+            batch_mask = self._mask_to_batch_tensor(updated_mask, x.shape[0])
+            batch_preds = finetuned_model(
+                x,
+                dynamic_world=dw,
+                mask=batch_mask,
+                latlons=latlons,
+                month=month,
+            )
+            labels.append(label.cpu().numpy())
+            pred_list.append(batch_preds.cpu().numpy())
+
+        target = np.concatenate(labels)
+        results_dict = {}
+        int_to_labels, _ = zip(*sorted(test_dataset.labels_to_int.items(), key=lambda l_i: l_i[1]))
+        test_preds_np = np.argmax(np.concatenate(pred_list, axis=0), axis=1)
+        prefix = f"finetuning_{finetuned_model.aggregate}"
+        results_dict = {
+            f"{self.name}: {prefix}_num_samples": len(target),
+            f"{self.name}: {prefix}_f1_score": f1_score(target, test_preds_np, average="weighted"),
+            f"{self.name}: {prefix}_accuracy_score": accuracy_score(target, test_preds_np),
+        }
+        class_matrix = confusion_matrix(test_preds_np, target)
+        accuracies = class_matrix.diagonal() / class_matrix.sum(axis=1)
+        for f1, acc, label in zip(
+            f1_score(target, test_preds_np, average=None), accuracies, int_to_labels
+        ):
+            results_dict[f"{self.name}: {prefix}_f1_score_{label}"] = f1
+            results_dict[f"{self.name}: {prefix}_accuracy_score_{label}"] = acc
+        return results_dict
+
+    @torch.no_grad()
+    def evaluate_for_sklearn(
+        self,
+        finetuned_model: Dict,
         pretrained_model=None,
         mask: Optional[np.ndarray] = None,
     ) -> Dict:
+        hparams = Hyperparams(batch_size=self.batch_size)
         updated_mask = self.update_mask(mask)
 
-        if isinstance(finetuned_model, Dict):
-            assert isinstance(pretrained_model, (Seq2Seq, Mosaiks1d))
-            pred_dict: Dict[str, Dict[str, List]] = {}
-            for aggregate, model_list in finetuned_model.items():
-                pred_dict[aggregate] = {model.__class__.__name__: [] for model in model_list}
-        else:
-            raise NotImplementedError
+        assert isinstance(pretrained_model, (Seq2Seq, Mosaiks1d))
+        pred_dict: Dict[str, Dict[str, List]] = {}
+        for aggregate, model_list in finetuned_model.items():
+            pred_dict[aggregate] = {model.__class__.__name__: [] for model in model_list}
 
         test_dataset = EuroSatDataset(self.input_patch_size, split="test")
         test_dl = DataLoader(
             test_dataset,
-            batch_size=Hyperparams.batch_size // self.num_patches,
+            batch_size=hparams.batch_size // self.num_patches,
             shuffle=False,
             collate_fn=EuroSatDataset.collate_fn,
             num_workers=Hyperparams.num_workers,
@@ -231,7 +282,9 @@ class EuroSatEval(EvalTaskWithAggregatedOutputs):
             )
             for aggregate, model_list in finetuned_model.items():
                 assert not torch.isnan(encodings).any()
-                reshaped_encodings = self.reshape_for_aggregate(encodings, aggregate).cpu()
+                reshaped_encodings = PrestoFinetuningWithAggregates.reshape_for_aggregate(
+                    encodings, aggregate, self.outputs_per_image
+                ).cpu()
                 assert not torch.isnan(reshaped_encodings).any()
                 for model in model_list:
                     preds = model.predict(reshaped_encodings.numpy())
@@ -273,19 +326,20 @@ class EuroSatEval(EvalTaskWithAggregatedOutputs):
         mask = self.update_mask(mask)
         for model_mode in model_modes:
             assert model_mode in [
-                # "finetune",  # not yet implemented
                 "Regression",
                 "Random Forest",
                 "KNNat5",
                 "KNNat20",
                 "KNNat100",
+                "finetune",
             ]
-        # if "finetune" in model_modes:
-        #     model = self.finetune(pretrained_model, mask)
-        #     results_dict.update(self.evaluate(model, None, mask))
-        # sklearn_modes = [x for x in model_modes if x != "finetune"]
-        sklearn_modes = model_modes
-        if len(sklearn_modes) > 0:
+        results_dict = {}
+        if "finetune" in model_modes:
+            for aggregate in self.aggregates:
+                model = self.finetune_with_aggregate(pretrained_model, mask, aggregate)
+                results_dict.update(self.evaluate_for_finetuned_model(model, mask))
+        sklearn_modes = [x for x in model_modes if x != "finetune"]
+        if (len(sklearn_modes) > 0) and (len(self.sklearn_aggregates) > 0):
             train_dl = DataLoader(
                 EuroSatDataset(self.input_patch_size, split="train", merge_train_val=True),
                 shuffle=False,
@@ -299,53 +353,34 @@ class EuroSatEval(EvalTaskWithAggregatedOutputs):
                 mask=mask,
                 models=sklearn_modes,
             )
-            return self.evaluate(sklearn_model_dict, pretrained_model, mask)
-        return {}
+            results_dict.update(
+                self.evaluate_for_sklearn(sklearn_model_dict, pretrained_model, mask)
+            )
+        return results_dict
 
-    def finetune(self, pretrained_model, mask: Optional[np.ndarray] = None) -> FineTuningModel:
-        # TODO - where are these controlled?
-        raise NotImplementedError
-        # hyperparams = Hyperparams()
-        # prop_val_images = 0.1
-        # model = self._construct_finetuning_model(pretrained_model)
+    def finetune_with_aggregate(
+        self, pretrained_model, mask: Optional[np.ndarray], aggregate: str
+    ) -> FineTuningModel:
+        hparams = Hyperparams(batch_size=self.batch_size)
+        model = self._construct_finetuning_model_with_aggregates(pretrained_model, aggregate)
+        opt = AdamW(model.parameters(), lr=hparams.lr, weight_decay=hparams.weight_decay)
 
-        # # TODO - should this be more intelligent? e.g. first learn the
-        # # (randomly initialized) head before modifying parameters for
-        # # the whole model?
-        # opt = Adam(model.parameters(), lr=hyperparams.lr)
-        # loss_fn = nn.CrossEntropyLoss(reduction="mean")
+        loss_fn = nn.CrossEntropyLoss(reduction="mean")
 
-        # x, dw, latlons, target, image_names = self.load_npys(test=False)
-
-        # unique_image_names = np.unique(image_names)
-        # num = round(prop_val_images * len(unique_image_names))
-        # val_images = np.random.choice(unique_image_names, size=num, replace=False)
-        # val_filter = np.isin(image_names, val_images)
-
-        # train_dl = DataLoader(
-        #     TensorDataset(
-        #         torch.from_numpy(x[~val_filter]).to(device).float(),
-        #         torch.from_numpy(dw[~val_filter]).to(device).long(),
-        #         torch.from_numpy(latlons[~val_filter]).to(device).float(),
-        #         torch.from_numpy(target[~val_filter]).to(device).long(),
-        #         torch.full(target[~val_filter].shape[:1], self.start_month, device=device).long(),
-        #     ),
-        #     batch_size=hyperparams.batch_size,
-        #     shuffle=True,
-        # )
-
-        # val_dl = DataLoader(
-        #     TensorDataset(
-        #         torch.from_numpy(x[val_filter]).to(device).float(),
-        #         torch.from_numpy(dw[val_filter]).to(device).long(),
-        #         torch.from_numpy(latlons[val_filter]).to(device).float(),
-        #         torch.from_numpy(target[val_filter]).to(device).long(),
-        #         torch.full(target[val_filter].shape[:1], self.start_month, device=device).long(),
-        #     ),
-        #     batch_size=hyperparams.batch_size,
-        #     shuffle=False,
-        # )
-
-        # return self.finetune_pytorch_model(
-        #     model, hyperparams, opt, train_dl, val_dl, loss_fn, loss_fn, mask
-        # )
+        train_dl = DataLoader(
+            EuroSatDataset(self.input_patch_size, split="train", merge_train_val=False),
+            shuffle=True,
+            batch_size=hparams.batch_size // self.num_patches,
+            collate_fn=EuroSatDataset.finetuning_collate_fn,
+            num_workers=hparams.num_workers,
+        )
+        val_dl = DataLoader(
+            EuroSatDataset(self.input_patch_size, split="val", merge_train_val=False),
+            shuffle=False,
+            batch_size=hparams.batch_size // self.num_patches,
+            collate_fn=EuroSatDataset.finetuning_collate_fn,
+            num_workers=hparams.num_workers,
+        )
+        return self.finetune_pytorch_model(
+            model, hparams, opt, train_dl, val_dl, loss_fn, loss_fn, mask
+        )
