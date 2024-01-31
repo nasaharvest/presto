@@ -15,8 +15,8 @@ from sklearn.base import BaseEstimator
 from sklearn.metrics import f1_score
 from sklearn.model_selection import train_test_split
 from torch import nn
-from torch.optim import SGD, Adam
-from torch.utils.data import DataLoader, TensorDataset
+from torch.optim import Adam
+from torch.utils.data import DataLoader, TensorDataset, default_collate
 from tqdm import tqdm
 
 from ..dataops import S1_S2_ERA5_SRTM, TAR_BUCKET
@@ -35,9 +35,14 @@ from .eval import EvalTask, Hyperparams
 
 
 @memoized
-def get_eval_datasets(normalize: bool = False, ignore_dynamic_world: bool = False):
+def get_eval_datasets(
+    normalize: bool = False, ignore_dynamic_world: bool = False, start_month: int = 1
+):
     return CropHarvest.create_benchmark_datasets(
-        cropharvest_data_dir(), normalize=normalize, ignore_dynamic_world=ignore_dynamic_world
+        cropharvest_data_dir(),
+        normalize=normalize,
+        ignore_dynamic_world=ignore_dynamic_world,
+        start_month=start_month,
     )
 
 
@@ -62,28 +67,36 @@ class CropHarvestEval(EvalTask):
     start_month = 1
     num_timesteps = None
 
+    country_to_sizes: Dict[str, List] = {
+        "Kenya": [20, 32, 64, 96, 128, 160, 192, 224, 256, None],
+        "Togo": [20, 50, 126, 254, 382, 508, 636, 764, 892, 1020, 1148, None],
+    }
+
     def __init__(
         self,
         country: str,
         ignore_dynamic_world: bool = False,
         num_timesteps: Optional[int] = None,
-        seeds: List[int] = [DEFAULT_SEED],
+        sample_size: Optional[int] = None,
+        seed: int = DEFAULT_SEED,
     ):
         download_cropharvest_data()
 
-        evaluation_datasets = get_eval_datasets(False, ignore_dynamic_world)
+        evaluation_datasets = get_eval_datasets(False, ignore_dynamic_world, self.start_month)
         evaluation_datasets = [d for d in evaluation_datasets if country in d.id]
         assert len(evaluation_datasets) == 1
         self.dataset = evaluation_datasets[0]
         assert self.dataset.task.normalize is False
         self.ignore_dynamic_world = ignore_dynamic_world
         self.num_timesteps = num_timesteps
+        self.sample_size = sample_size
 
         suffix = "_no_dynamic_world" if ignore_dynamic_world else ""
+        suffix = f"_{sample_size}" if sample_size else ""
         suffix = f"{suffix}_{num_timesteps}" if num_timesteps is not None else suffix
 
         self.name = f"CropHarvest_{country}{suffix}"
-        super().__init__(seeds)
+        super().__init__(seed)
 
     @staticmethod
     def export_dynamic_world(test: bool = False):
@@ -135,41 +148,10 @@ class CropHarvestEval(EvalTask):
         else:
             return x[:, : self.num_timesteps]
 
-    def finetune(self, pretrained_model, mask: Optional[np.ndarray] = None) -> FineTuningModel:
-        # TODO - where are these controlled?
-        lr, num_grad_steps, k = 0.001, 250, 10
-        model = self._construct_finetuning_model(pretrained_model)
-
-        # TODO - should this be more intelligent? e.g. first learn the
-        # (randomly initialized) head before modifying parameters for
-        # the whole model?
-        opt = SGD(model.parameters(), lr=lr)
-        loss_fn = nn.BCELoss(reduction="mean")
-        batch_mask = self._mask_to_batch_tensor(mask, k)
-
-        for i in range(num_grad_steps):
-            if i != 0:
-                model.train()
-                opt.zero_grad()
-
-            train_x, train_dw, latlons, train_y = self.dataset.sample(k, deterministic=False)
-            preds = model(
-                self.truncate_timesteps(
-                    torch.from_numpy(S1_S2_ERA5_SRTM.normalize(train_x)).to(device).float()
-                ),
-                mask=self.truncate_timesteps(batch_mask),
-                dynamic_world=self.truncate_timesteps(
-                    torch.from_numpy(train_dw).to(device).long()
-                ),
-                latlons=torch.from_numpy(latlons).to(device).float(),
-                month=self.start_month,
-            ).squeeze(dim=1)
-            loss = loss_fn(preds, torch.from_numpy(train_y).to(device).float())
-
-            loss.backward()
-            opt.step()
-        model.eval()
-        return model
+    @staticmethod
+    def collate_fn(data):
+        x, dw, latlons, labels, month = default_collate(data)
+        return (x.float(), dw.long(), latlons.float(), torch.unsqueeze(labels.float(), 1), month)
 
     @torch.no_grad()
     def evaluate(
@@ -247,13 +229,10 @@ class CropHarvestEval(EvalTask):
         for x in model_modes:
             assert x in ["finetune", "Regression", "Random Forest"]
         results_dict = {}
-        if "finetune" in model_modes:
-            model = self.finetune(pretrained_model, mask)
-            results_dict.update(self.evaluate(model, None, mask))
 
         sklearn_modes = [x for x in model_modes if x != "finetune"]
         if len(sklearn_modes) > 0:
-            array, dw, latlons, y = self.dataset.as_array()
+            array, dw, latlons, y = self.dataset.as_array(num_samples=self.sample_size)
             month = np.array([self.start_month] * array.shape[0])
             dl = DataLoader(
                 TensorDataset(
@@ -289,7 +268,7 @@ class CropHarvestMultiClassValidation(CropHarvestEval):
         val_ratio: float = 0.2,
         n_per_class: Optional[int] = 100,
         ignore_dynamic_world: bool = False,
-        seeds: List[int] = [DEFAULT_SEED],
+        seed: int = DEFAULT_SEED,
     ):
         download_cropharvest_data()
         task = Task(normalize=False)
@@ -321,8 +300,6 @@ class CropHarvestMultiClassValidation(CropHarvestEval):
 
         name_suffix = f"_{n_per_class}" if n_per_class is not None else ""
         dw_suffix = "_no_dynamic_world" if ignore_dynamic_world else ""
-        assert len(seeds) == 1
-        seed = seeds[0]
         self.name = f"CropHarvest_multiclass_global{name_suffix}{dw_suffix}_{seed}"
         self.seed = seed
 

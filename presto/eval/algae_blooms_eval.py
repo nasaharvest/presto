@@ -19,7 +19,6 @@ from tqdm import tqdm
 from .. import utils
 from ..dataops import S1_S2_ERA5_SRTM, TAR_BUCKET
 from ..model import FineTuningModel, Mosaiks1d, Seq2Seq
-from ..presto import param_groups_lrd
 from ..utils import DEFAULT_SEED, device
 from .cropharvest_extensions import DynamicWorldExporter, Engineer
 from .eval import EvalTask, Hyperparams
@@ -40,9 +39,9 @@ class AlgaeBloomsEval(EvalTask):
     multilabel = False
     num_outputs = 1
 
-    def __init__(self, seeds: List[int] = [DEFAULT_SEED]) -> None:
+    def __init__(self, seed: int = DEFAULT_SEED) -> None:
         self.labels = self.load_labels()
-        super().__init__(seeds)
+        super().__init__(seed)
 
     @staticmethod
     def load_labels():
@@ -212,11 +211,13 @@ class AlgaeBloomsEval(EvalTask):
         hyperparams = Hyperparams(max_epochs=200, patience=10, batch_size=64)
         model = self._construct_finetuning_model(pretrained_model)
 
-        parameters = param_groups_lrd(model)
-        opt = AdamW(parameters, lr=hyperparams.lr)
+        opt = AdamW(model.parameters(), lr=hyperparams.lr, weight_decay=hyperparams.weight_decay)
 
         def loss_fn(preds, target):
             return nn.functional.huber_loss(preds.flatten(), target)
+
+        def val_loss_fn(preds, target):
+            return mean_squared_error(preds.cpu().numpy(), target.cpu().numpy())
 
         x_np, dw_np, month_np, target_np, latlon_np = self.load_npys(test=False)
 
@@ -252,7 +253,7 @@ class AlgaeBloomsEval(EvalTask):
         )
 
         return self.finetune_pytorch_model(
-            model, hyperparams, opt, train_dl, val_dl, loss_fn, mean_squared_error, mask
+            model, hyperparams, opt, train_dl, val_dl, loss_fn, val_loss_fn, mask
         )
 
     def finetuning_results(

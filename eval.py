@@ -15,6 +15,7 @@ from wandb.sdk.wandb_run import Run
 from presto.eval import (
     AlgaeBloomsEval,
     CropHarvestEval,
+    CroptypeFranceEval,
     EuroSatEval,
     EvalTask,
     FuelMoistureEval,
@@ -52,13 +53,6 @@ argparser.add_argument(
     help="Output is stored in <data_dir>/output. "
     "Leave empty to use the directory you are running this file from.",
 )
-argparser.add_argument(
-    "--eval_seeds",
-    type=int,
-    default=[0, DEFAULT_SEED, 48],
-    nargs="+",
-    help="seeds to use for eval tasks",
-)
 argparser.add_argument("--fully_supervised", dest="fully_supervised", action="store_true")
 argparser.add_argument("--wandb", dest="wandb", action="store_true")
 argparser.set_defaults(wandb=False)
@@ -68,7 +62,6 @@ args = argparser.parse_args().__dict__
 path_to_state_dict = args["path_to_state_dict"]
 path_to_config = args["path_to_config"]
 fully_supervised = args["fully_supervised"]
-eval_seeds = args["eval_seeds"]
 wandb_enabled = args["wandb"]
 data_dir = args["data_dir"]
 if data_dir != "":
@@ -93,62 +86,66 @@ logger.info("Using output dir: %s" % logging_dir)
 
 if path_to_config == "":
     path_to_config = config_dir / "default.json"
+logger.info("Loading config from %s" % path_to_config)
 model_kwargs = json.load(Path(path_to_config).open("r"))
 model = Presto.construct(**model_kwargs)
 
 if not fully_supervised:
     if path_to_state_dict == "":
         path_to_state_dict = default_model_path
+    logger.info("Loading params from %s" % path_to_state_dict)
     model.load_state_dict(torch.load(path_to_state_dict, map_location=device))
 model.to(device)
 
 logger.info("Loading evaluation tasks")
+seeds = [0, DEFAULT_SEED, 84]
 eval_task_list: List[EvalTask] = [
-    *[CropHarvestEval("Kenya", ignore_dynamic_world=True, seeds=[s]) for s in eval_seeds],
-    *[CropHarvestEval("Togo", ignore_dynamic_world=True, seeds=[s]) for s in eval_seeds],
-    *[CropHarvestEval("Brazil", ignore_dynamic_world=True, seeds=[s]) for s in eval_seeds],
-    *[FuelMoistureEval(seeds=[s]) for s in eval_seeds],
-    *[AlgaeBloomsEval(seeds=[s]) for s in eval_seeds],
-    # no seeds for EuroSat, which we evaluate using
-    # a KNN classifier
-    EuroSatEval(rgb=True, input_patch_size=32),
-    EuroSatEval(rgb=True, input_patch_size=16),
-    EuroSatEval(rgb=True, input_patch_size=8),
-    EuroSatEval(rgb=True, input_patch_size=4),
-    EuroSatEval(rgb=True, input_patch_size=2),
-    EuroSatEval(rgb=True, input_patch_size=1),
-    EuroSatEval(rgb=False, input_patch_size=32),
-    EuroSatEval(rgb=False, input_patch_size=16),
-    EuroSatEval(rgb=False, input_patch_size=8),
-    EuroSatEval(rgb=False, input_patch_size=4),
-    EuroSatEval(rgb=False, input_patch_size=2),
-    EuroSatEval(rgb=False, input_patch_size=1),
-    TreeSatEval("S1", input_patch_size=1, seeds=eval_seeds),
-    TreeSatEval("S2", input_patch_size=1, seeds=eval_seeds),
-    TreeSatEval("S1", input_patch_size=2, seeds=eval_seeds),
-    TreeSatEval("S2", input_patch_size=2, seeds=eval_seeds),
-    TreeSatEval("S1", input_patch_size=3, seeds=eval_seeds),
-    TreeSatEval("S2", input_patch_size=3, seeds=eval_seeds),
-    TreeSatEval("S1", input_patch_size=6, seeds=eval_seeds),
-    TreeSatEval("S2", input_patch_size=6, seeds=eval_seeds),
-    *[CropHarvestEval("Kenya", seeds=[s]) for s in eval_seeds],
-    *[CropHarvestEval("Togo", seeds=[s]) for s in eval_seeds],
-    *[CropHarvestEval("Brazil", seeds=[s]) for s in eval_seeds],
+    *[
+        CropHarvestEval(country="Brazil", ignore_dynamic_world=idw, seed=seed)
+        for idw in [True, False]
+        for seed in seeds
+    ],
+    *[
+        CropHarvestEval(country="Kenya", ignore_dynamic_world=idw, seed=seed, sample_size=s)
+        for idw in [True, False]
+        for seed in seeds
+        for s in CropHarvestEval.country_to_sizes["Kenya"]
+    ],
+    *[
+        CropHarvestEval(country="Togo", ignore_dynamic_world=idw, seed=seed, sample_size=s)
+        for idw in [True, False]
+        for seed in seeds
+        for s in CropHarvestEval.country_to_sizes["Togo"]
+    ],
+    *[FuelMoistureEval(seed=seed) for seed in seeds],
+    *[AlgaeBloomsEval(seed=seed) for seed in seeds],
+    *[
+        EuroSatEval(rgb=rgb, input_patch_size=ps, seed=seed, aggregates=["mean"])
+        for rgb in [True, False]
+        for ps in [1, 2, 4, 8, 16, 32, 64]
+        for seed in seeds
+    ],
+    *[
+        TreeSatEval(subset=subset, seed=seed, aggregates=["mean"])
+        for subset in ["S1", "S2"]
+        for seed in seeds
+    ],
+    *[
+        CropHarvestEval("Togo", ignore_dynamic_world=True, num_timesteps=x, seed=seed)
+        for x in range(1, 12)
+        for seed in seeds
+    ],
+    *[
+        CropHarvestEval("Kenya", ignore_dynamic_world=True, num_timesteps=x, seed=seed)
+        for x in range(1, 12)
+        for seed in seeds
+    ],
+    *[
+        CroptypeFranceEval(input_patch_size=patch_size, aggregates=["mean"], seed=seed)
+        for patch_size in [1, 5]
+        for seed in seeds
+    ],
 ]
-# add CropHarvest over time
-for seed in eval_seeds:
-    eval_task_list.extend(
-        [
-            CropHarvestEval("Togo", ignore_dynamic_world=True, num_timesteps=x, seeds=[seed])
-            for x in range(1, 12)
-        ]
-    )
-    eval_task_list.extend(
-        [
-            CropHarvestEval("Kenya", ignore_dynamic_world=True, num_timesteps=x, seeds=[seed])
-            for x in range(1, 12)
-        ]
-    )
 
 if wandb_enabled:
     eval_config = {
@@ -157,7 +154,6 @@ if wandb_enabled:
         "decoder": model.decoder.__class__,
         "device": device,
         "model_parameters": "random" if fully_supervised else path_to_state_dict,
-        "logging_dir": logging_dir,
         **args,
         **model_kwargs,
     }
@@ -167,9 +163,16 @@ result_dict = {}
 for eval_task in tqdm(eval_task_list, desc="Full Evaluation"):
     model_modes = ["finetune", "Regression", "Random Forest"]
     if "EuroSat" in eval_task.name:
-        model_modes = ["Regression", "Random Forest", "KNNat5", "KNNat20", "KNNat100"]
+        model_modes = [
+            "Regression",
+            "Random Forest",
+            "KNNat5",
+            "KNNat20",
+            "KNNat100",
+            "finetune",
+        ]
     if "TreeSat" in eval_task.name:
-        model_modes = ["Random Forest"]
+        model_modes = ["finetune", "Random Forest"]
     logger.info(eval_task.name)
 
     results = eval_task.finetuning_results(model, model_modes=model_modes)
