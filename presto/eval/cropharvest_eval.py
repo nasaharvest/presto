@@ -302,6 +302,7 @@ class CropHarvestMultiClassValidation(CropHarvestEval):
         dw_suffix = "_no_dynamic_world" if ignore_dynamic_world else ""
         self.name = f"CropHarvest_multiclass_global{name_suffix}{dw_suffix}_{seed}"
         self.seed = seed
+        self.sample_size = None
 
     @torch.no_grad()
     def evaluate(
