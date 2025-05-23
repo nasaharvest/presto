@@ -169,6 +169,13 @@ dtype: int64
 
 ```
 
+## Generating Presto Embeddings in Google Earth Engine
+You can generate Presto embeddings in Google Earth Engine by: 
+1. Deploying Presto to Vertex AI <a target="_blank" href="https://colab.research.google.com/github/nasaharvest/presto/blob/initial-deploy-code/deploy/1_Presto_to_VertexAI.ipynb">
+  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
+</a>
+2. Using the [ee.Model.fromVertexAi](https://developers.google.com/earth-engine/apidocs/ee-model-fromvertexai) function in Google Earth Engine ([script on GEE](https://code.earthengine.google.com/1d196e8466506239c4780585c0e28d26))
+
 ## Reference
 If you find this code useful, please cite the following paper:
 ```
