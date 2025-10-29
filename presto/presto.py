@@ -1,10 +1,11 @@
 import math
 from copy import deepcopy
-from typing import Optional, Tuple, Union, cast
+from typing import Literal, Optional, Tuple, Union, cast
 
 import numpy as np
 import torch
 from einops import rearrange, repeat
+from flash_attn.flash_attn_interface import flash_attn_varlen_qkvpacked_func
 from torch import nn
 from torch.jit import Final
 from torch.nn import functional as F
@@ -17,7 +18,8 @@ from .utils import default_model_path, device
 
 class Attention(nn.Module):
     # https://github.com/huggingface/pytorch-image-models/blob/main/timm/models/vision_transformer.py
-    fast_attn: Final[bool]
+    # fast_attn: Final[bool]
+    attn: Final[Literal["sdpa", "flash", "naive"]]
 
     def __init__(
         self,
@@ -28,13 +30,14 @@ class Attention(nn.Module):
         attn_drop=0.0,
         proj_drop=0.0,
         norm_layer=nn.LayerNorm,
+        attn: Literal["sdpa", "flash", "naive"] = "sdpa",
     ):
         super().__init__()
         assert dim % num_heads == 0, "dim should be divisible by num_heads"
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
         self.scale = self.head_dim**-0.5
-        self.fast_attn = hasattr(torch.nn.functional, "scaled_dot_product_attention")  # FIXME
+        self.attn = attn
 
         self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
         self.q_norm = norm_layer(self.head_dim) if qk_norm else nn.Identity()
@@ -45,31 +48,103 @@ class Attention(nn.Module):
 
     def forward(self, x, attn_mask=None):
         B, N, C = x.shape
-        qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
-        q, k, v = qkv.unbind(0)
-        q, k = self.q_norm(q), self.k_norm(k)
+        qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, self.head_dim)
 
-        if self.fast_attn:
+        if self.attn == "flash":
+            # Compute sequence lengths from attention mask
+            # attn_mask is [B, N] where True/1 means valid token, False/0 means padding
             if attn_mask is not None:
-                attn_mask = attn_mask[:, None, None].repeat((1, self.num_heads, N, 1))
-            x = F.scaled_dot_product_attention(
-                q,
-                k,
-                v,
-                # a value of True indicates that the element should take part in attention
-                attn_mask=attn_mask,
-                dropout_p=self.attn_drop.p,
-            )
+                # Count valid (non-padding) tokens per sequence
+                seqlens = attn_mask.sum(dim=1).int()  # [B]
+            else:
+                # No padding, all tokens are valid
+                seqlens = torch.full((B,), N, dtype=torch.int32, device=x.device)
+
+            # Compute cumulative sequence lengths for flash attention
+            # cu_seqlens[i] = sum of sequence lengths up to batch i
+            cu_seqlens = torch.cat(
+                [torch.zeros(1, dtype=torch.int32, device=x.device), seqlens.cumsum(dim=0)]
+            ).to(torch.int32)  # [B+1]
+
+            max_seqlen = seqlens.max().item()
+
+            # Remove padding tokens to create packed tensor
+            # We need to flatten and select only valid tokens
+            if attn_mask is not None:
+                # Create indices for valid tokens
+                valid_mask = attn_mask.bool()  # [B, N]
+                # Flatten qkv_packed and select valid tokens
+                qkv_packed_flat = qkv.reshape(B * N, 3, self.num_heads, self.head_dim)
+                valid_mask_flat = valid_mask.reshape(B * N)
+                qkv_packed_valid = qkv_packed_flat[
+                    valid_mask_flat
+                ]  # [total_valid, 3, num_heads, head_dim]
+            else:
+                # No padding, just reshape
+                qkv_packed_valid = qkv.reshape(B * N, 3, self.num_heads, self.head_dim)
+
+            # Call flash attention
+            x_packed = flash_attn_varlen_qkvpacked_func(
+                qkv_packed_valid,
+                cu_seqlens,
+                max_seqlen,
+                dropout_p=self.attn_drop.p if self.training else 0.0,
+                softmax_scale=self.scale,
+                causal=False,
+                window_size=(-1, -1),  # -1 means infinite context window
+                softcap=0.0,  # 0.0 means deactivated
+                alibi_slopes=None,
+                deterministic=False,
+                return_attn_probs=False,
+            )  # [total_valid, num_heads, head_dim]
+
+            # Unpack result back to [B, N, num_heads, head_dim] with padding
+            if attn_mask is not None:
+                # Create output tensor with zeros for padding
+                x = torch.zeros(
+                    B * N,
+                    self.num_heads,
+                    self.head_dim,
+                    dtype=x_packed.dtype,
+                    device=x_packed.device,
+                )
+                # Fill in valid positions
+                x[valid_mask_flat] = x_packed
+                x = x.reshape(B, N, -1)
+            else:
+                x = x_packed.reshape(B, N, -1)
+
         else:
-            if attn_mask is not None:
-                raise NotImplementedError
-            q = q * self.scale
-            attn = q @ k.transpose(-2, -1)
-            attn = attn.softmax(dim=-1)
-            attn = self.attn_drop(attn)
-            x = attn @ v
+            q, k, v = qkv.permute(2, 0, 3, 1, 4).unbind(0)
+            q, k = self.q_norm(q), self.k_norm(k)
 
-        x = x.transpose(1, 2).reshape(B, N, C)
+            if self.attn == "sdpa":
+                if attn_mask is not None:
+                    if torch.all(attn_mask):
+                        attn_mask = None
+                    else:
+                        attn_mask = attn_mask[:, None, None].repeat((1, self.num_heads, N, 1))
+
+                x = F.scaled_dot_product_attention(
+                    q,
+                    k,
+                    v,
+                    # a value of True indicates that the element should take part in attention
+                    attn_mask=attn_mask,
+                    dropout_p=self.attn_drop.p,
+                )
+            else:
+                if attn_mask is not None:
+                    raise NotImplementedError
+                q = q * self.scale
+                attn = q @ k.transpose(-2, -1)
+                attn = attn.softmax(dim=-1)
+                attn = self.attn_drop(attn)
+                x = attn @ v
+
+            x = x.transpose(1, 2)
+
+        x = x.reshape(B, N, C)
         x = self.proj(x)
         x = self.proj_drop(x)
         return x
@@ -129,6 +204,7 @@ class Block(nn.Module):
         init_values=None,
         act_layer=nn.GELU,
         norm_layer=nn.LayerNorm,
+        attn="sdpa",
     ):
         super().__init__()
         self.norm1 = norm_layer(dim)
@@ -140,6 +216,7 @@ class Block(nn.Module):
             attn_drop=attn_drop,
             proj_drop=drop,
             norm_layer=norm_layer,
+            attn=attn,
         )
         self.ls1 = LayerScale(dim, init_values=init_values) if init_values else nn.Identity()
 
@@ -225,6 +302,7 @@ class Encoder(nn.Module):
         mlp_ratio=2,
         num_heads=8,
         max_sequence_length=24,
+        attn="sdpa",
     ):
         super().__init__()
 
@@ -256,6 +334,7 @@ class Encoder(nn.Module):
                     mlp_ratio,
                     qkv_bias=True,
                     norm_layer=nn.LayerNorm,
+                    attn=attn,
                 )
                 for _ in range(depth)
             ]
@@ -279,7 +358,6 @@ class Encoder(nn.Module):
         self.initialize_weights()
 
     def initialize_weights(self):
-
         pos_embed = get_sinusoid_encoding_table(self.pos_embed.shape[1], self.pos_embed.shape[-1])
         self.pos_embed.data.copy_(pos_embed)
 
@@ -334,7 +412,6 @@ class Encoder(nn.Module):
         month: Union[torch.Tensor, int] = 0,
         eval_task: bool = True,
     ):
-
         if mask is None:
             mask = torch.zeros_like(x, device=x.device).float()
 
@@ -432,6 +509,7 @@ class Decoder(nn.Module):
         decoder_num_heads=8,
         mlp_ratio=2,
         max_sequence_length=24,
+        attn="sdpa",
     ):
         super().__init__()
 
@@ -455,6 +533,7 @@ class Decoder(nn.Module):
                     mlp_ratio,
                     qkv_bias=True,
                     norm_layer=nn.LayerNorm,
+                    attn=attn,
                 )
                 for _ in range(decoder_depth)
             ]
@@ -485,7 +564,6 @@ class Decoder(nn.Module):
         self.initialize_weights()
 
     def initialize_weights(self):
-
         pos_embed = get_sinusoid_encoding_table(self.pos_embed.shape[1], self.pos_embed.shape[-1])
         self.pos_embed.data.copy_(pos_embed)
 
@@ -606,7 +684,6 @@ class Decoder(nn.Module):
         return torch.cat(eo_output, dim=-1), cast(torch.Tensor, dw_output)
 
     def forward(self, x, orig_indices, x_mask, month):
-
         x = self.decoder_embed(x)
         x = self.add_masked_tokens(x, orig_indices, x_mask)
         x = self.add_embeddings(x, month)
@@ -639,7 +716,6 @@ class PrestoFineTuningModel(FineTuningModel):
         mask: Optional[torch.Tensor] = None,
         month: Union[torch.Tensor, int] = 0,
     ) -> torch.Tensor:
-
         return self.head(
             self.encoder(
                 x=x,
@@ -716,7 +792,6 @@ class PrestoFinetuningWithAggregates(FineTuningModel):
         mask: Optional[torch.Tensor] = None,
         month: Union[torch.Tensor, int] = 0,
     ) -> torch.Tensor:
-
         # inputs are expected to be with 2 batch dimensions
         # (batches of images) (patches within an image) ...
         # vmap doesn't work with data dependent flows (yet)
@@ -773,6 +848,7 @@ class Presto(Seq2Seq):
         decoder_depth=2,
         decoder_num_heads=8,
         max_sequence_length=24,
+        attn="sdpa",
     ):
         encoder = Encoder(
             embedding_size=encoder_embedding_size,
@@ -782,6 +858,7 @@ class Presto(Seq2Seq):
             mlp_ratio=mlp_ratio,
             num_heads=encoder_num_heads,
             max_sequence_length=max_sequence_length,
+            attn=attn,
         )
         decoder = Decoder(
             channel_embeddings=encoder.channel_embed,
@@ -791,6 +868,7 @@ class Presto(Seq2Seq):
             decoder_num_heads=decoder_num_heads,
             mlp_ratio=mlp_ratio,
             max_sequence_length=max_sequence_length,
+            attn=attn,
         )
         return cls(encoder, decoder)
 
