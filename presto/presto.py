@@ -124,7 +124,6 @@ class Attention(nn.Module):
                         attn_mask = None
                     else:
                         attn_mask = attn_mask[:, None, None].repeat((1, self.num_heads, N, 1))
-
                 x = F.scaled_dot_product_attention(
                     q,
                     k,
@@ -134,6 +133,8 @@ class Attention(nn.Module):
                     dropout_p=self.attn_drop.p,
                 )
             else:
+                q, k, v = qkv.permute(2, 0, 3, 1, 4).unbind(0)
+                q, k = self.q_norm(q), self.k_norm(k)
                 if attn_mask is not None:
                     raise NotImplementedError
                 q = q * self.scale
@@ -492,7 +493,8 @@ class Encoder(nn.Module):
         if eval_task:
             # set masked tokens to 0
             x_for_mean = x * (1 - upd_mask.unsqueeze(-1))
-            x_mean = x_for_mean.sum(dim=1) / torch.sum(1 - upd_mask, -1, keepdim=True)
+            # type_as for half precision
+            x_mean = (x_for_mean.sum(dim=1) / torch.sum(1 - upd_mask, -1, keepdim=True)).type_as(x)
             # note: page 6 of https://arxiv.org/pdf/2104.02057.pdf
             # suggests removing the norm layer
             return self.norm(x_mean)

@@ -1,10 +1,13 @@
+import torch
+from torch.cuda import max_memory_allocated, reset_peak_memory_stats
 from torch.utils.benchmark import Timer
 
 NUM_ITERATIONS = 100
-# For seq length (in Attention forward, so after channel grouping) in [30, 55]
 VARIABLE_LENGTH_RATIO = 0.5
+BATCH_SIZE = 4096
+REPEATS = 1
 
-setup = """
+setup = f"""
 import json
 from pathlib import Path
 
@@ -28,6 +31,7 @@ model_kwargs = json.load(Path(path_to_config).open("r"))
 # ------------ Dataloaders -------------------------------------
 # Set mask_ratio to 0.0 here because it will generate masks that result in
 #  sequences with equal length
+# Set to 0.01 because 0.0 gives gradient errors
 mask_params = MaskParams(MASK_STRATEGIES, 0.01)
 
 
@@ -37,7 +41,7 @@ def load_dataset(url, shuffle_on_load):
 
 
 train_dataset = load_dataset("data/dw_144_mini_shard_44.tar", shuffle_on_load=True)
-train_dataloader = wds.WebLoader(train_dataset, batch_size=4096)
+train_dataloader = wds.WebLoader(train_dataset, batch_size={BATCH_SIZE})
 
 mse = LossWrapper(nn.MSELoss())
 
@@ -45,17 +49,23 @@ b = next(iter(train_dataloader))
 mask, x, y, start_month = b[0].to(device), b[2].to(device), b[3].to(device), b[6]
 dw_mask, x_dw, y_dw = b[1].to(device), b[4].to(device).long(), b[5].to(device).long()
 latlons = b[7].to(device)
+
+x = torch.repeat_interleave(x, {REPEATS}, dim=1)
+y = torch.repeat_interleave(y, {REPEATS}, dim=1)
+x_dw = torch.repeat_interleave(x_dw, {REPEATS}, dim=1)
+y_dw = torch.repeat_interleave(y_dw, {REPEATS}, dim=1)
+mask = torch.repeat_interleave(mask, {REPEATS}, dim=1)
 """
 
 model_sdpa_setup = """
-model = Presto.construct(**model_kwargs, attn="sdpa")
+model = Presto.construct(**model_kwargs, attn="sdpa", max_sequence_length=480)
 model.to(device)
 optimizer = optim.AdamW(model.parameters(), lr=1e-4, betas=(0.9, 0.95))
 model.train()
 """
 
 model_flash_setup = """
-model = Presto.construct(**model_kwargs, attn="flash")
+model = Presto.construct(**model_kwargs, attn="flash", max_sequence_length=480)
 model.to(device)
 optimizer = optim.AdamW(model.parameters(), lr=1e-4, betas=(0.9, 0.95))
 model.train()
@@ -94,88 +104,105 @@ loss.backward()
 optimizer.step()
 """
 
+device = torch.device("cuda:0")
+
 # Run these with pytorch 2.0, and without the code changes to presto.py
+#   (or just comment the line that imports flash_attn_varlen_qkvpacked_func)
 
 # timer = Timer(
 #     stmt=forward_backward,
 #     setup=setup + model_sdpa_setup,
-#     label="Pytorch 2.0, scaled_dot_product_attention, on A100",
+#     label="Pytorch 2.0, scaled_dot_product_attention, on A100, set to None",
 # )
 # print(timer.timeit(NUM_ITERATIONS))
-
+# print(max_memory_allocated(device) / 10**6)
+# reset_peak_memory_stats(device)
 # timer = Timer(
 #     stmt=forward_backward,
 #     setup=setup + model_sdpa_setup + variable_length_mask_setup,
 #     label="Pytorch 2.0, scaled_dot_product_attention, on A100, varlen mask",
 # )
 # print(timer.timeit(NUM_ITERATIONS))
+# print(max_memory_allocated(device) / 10**6)
 
-
+# reset_peak_memory_stats(device)
 # timer = Timer(
 #     stmt=forward_backward,
 #     setup=setup + model_sdpa_setup + bfloat16_setup,
 #     label="Pytorch 2.0, scaled_dot_product_attention, on A100, bfloat16",
 # )
 # print(timer.timeit(NUM_ITERATIONS))
+# print(max_memory_allocated(device) / 10**6)
 
+# reset_peak_memory_stats(device)
 # timer = Timer(
 #     stmt=forward_backward,
 #     setup=setup + model_sdpa_setup + bfloat16_setup + variable_length_mask_setup,
 #     label="Pytorch 2.0, scaled_dot_product_attention, on A100, bfloat16, varlen mask",
 # )
 # print(timer.timeit(NUM_ITERATIONS))
+# print(max_memory_allocated(device) / 10**6)
 
-
+# exit()
 # run
 # pip install torch==2.2.2 torchvision==0.17.2 torchaudio==2.2.2
 
-
+# reset_peak_memory_stats(device)
 timer = Timer(
     stmt=forward_backward,
     setup=setup + model_sdpa_setup,
-    label="Pytorch 2.2, scaled_dot_product_attention, on A100",
+    label="Pytorch 2.2, scaled_dot_product_attention, on A100, set to None",
 )
 print(timer.timeit(NUM_ITERATIONS))
+print(max_memory_allocated(device) / 10**6)
 
+reset_peak_memory_stats(device)
 timer = Timer(
     stmt=forward_backward,
     setup=setup + model_sdpa_setup + variable_length_mask_setup,
     label="Pytorch 2.2, scaled_dot_product_attention, on A100, varlen mask",
 )
 print(timer.timeit(NUM_ITERATIONS))
+print(max_memory_allocated(device) / 10**6)
 
-
+reset_peak_memory_stats(device)
 timer = Timer(
     stmt=forward_backward,
     setup=setup + model_sdpa_setup + bfloat16_setup,
-    label="Pytorch 2.2, scaled_dot_product_attention, on A100, bfloat16",
+    label="Pytorch 2.2, scaled_dot_product_attention, on A100, bfloat16, set to None",
 )
 print(timer.timeit(NUM_ITERATIONS))
+print(max_memory_allocated(device) / 10**6)
 
+reset_peak_memory_stats(device)
 timer = Timer(
     stmt=forward_backward,
     setup=setup + model_sdpa_setup + bfloat16_setup + variable_length_mask_setup,
     label="Pytorch 2.2, scaled_dot_product_attention, on A100, bfloat16, varlen mask",
 )
 print(timer.timeit(NUM_ITERATIONS))
+print(max_memory_allocated(device) / 10**6)
 
-# 2.7.4.post1 because latest version gave error `lib/libstdc++.so.6: version `GLIBCXX_3.4.32' not found`
-#  may be a LINUX version issue, may be a python version issue? Tested for python 3.9
-# https://github.com/Dao-AILab/flash-attention/issues/1708
-# https://stackoverflow.com/questions/76974555/glibcxx-3-4-32-not-found-error-at-runtime-gcc-13-2-0
-# pip install packaging ninja
-# pip install flash-attn==2.7.4.post1 --no-build-isolation
+# # 2.7.4.post1 because latest version gave error `lib/libstdc++.so.6: version `GLIBCXX_3.4.32' not found`
+# #  may be a LINUX version issue, may be a python version issue? Tested for python 3.9
+# # https://github.com/Dao-AILab/flash-attention/issues/1708
+# # https://stackoverflow.com/questions/76974555/glibcxx-3-4-32-not-found-error-at-runtime-gcc-13-2-0
+# # pip install packaging ninja
+# # pip install flash-attn==2.7.4.post1 --no-build-isolation
 
+reset_peak_memory_stats(device)
 timer = Timer(
     stmt=forward_backward,
     setup=setup + model_flash_setup + bfloat16_setup,
     label="Pytorch 2.2, flashattention `flash_attn_varlen_qkvpacked_func`, on A100, bfloat16",
 )
 print(timer.timeit(NUM_ITERATIONS))
-
+print(max_memory_allocated(device) / 10**6)
+reset_peak_memory_stats(device)
 timer = Timer(
     stmt=forward_backward,
     setup=setup + model_flash_setup + bfloat16_setup + variable_length_mask_setup,
     label="Pytorch 2.2, flashattention `flash_attn_varlen_qkvpacked_func`, on A100, bfloat16, varlen mask",
 )
 print(timer.timeit(NUM_ITERATIONS))
+print(max_memory_allocated(device) / 10**6)
