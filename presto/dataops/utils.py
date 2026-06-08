@@ -135,9 +135,9 @@ def construct_batch_presto_input(
     # all inputs must agree on (batch_size, num_timesteps)
     batch_size = inputs[0].shape[0]
     num_timesteps = inputs[0].shape[1]
-    for data in inputs:
-        assert data.shape[0] == batch_size, "All inputs must share the same batch size"
-        assert data.shape[1] == num_timesteps, "All inputs must share the same number of timesteps"
+    for inp in inputs:
+        assert inp.shape[0] == batch_size, "All inputs must share the same batch size"
+        assert inp.shape[1] == num_timesteps, "All inputs must share the same number of timesteps"
 
     mask = torch.ones(batch_size, num_timesteps, len(BANDS))
     x = torch.zeros(batch_size, num_timesteps, len(BANDS))
