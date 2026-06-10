@@ -30,11 +30,6 @@ jobs:
       run: python -m flake8 .
     - name: mypy
       run: python -m mypy .
-    - uses: google-github-actions/auth@v0
-      with:
-        credentials_json: ${{ secrets.GCP_SA_KEY }}
-    - name: Set up Cloud SDK
-      uses: google-github-actions/setup-gcloud@v0
     - name: tests
       run: python -m unittest discover -s tests
     - name: test-train-script
