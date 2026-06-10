@@ -1,4 +1,9 @@
-from .dataops.utils import construct_single_presto_input
+from .dataops.utils import construct_batch_presto_input, construct_single_presto_input
 from .presto import Presto, PrestoFineTuningModel
 
-__all__ = ["Presto", "PrestoFineTuningModel", "construct_single_presto_input"]
+__all__ = [
+    "Presto",
+    "PrestoFineTuningModel",
+    "construct_single_presto_input",
+    "construct_batch_presto_input",
+]
